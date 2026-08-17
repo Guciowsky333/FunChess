@@ -1,0 +1,57 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      db:
+        image: postgres:16
+        env:
+          POSTGRES_DB: test_FunChess_db
+          POSTGRES_USER: test_postgres
+          POSTGRES_PASSWORD: test_postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DJANGO_SECRET_KEY: test-secret-key
+      DJANGO_DEBUG: True
+      POSTGRES_DB: test_FunChess_db
+      POSTGRES_USER: test_postgres
+      POSTGRES_PASSWORD: test_postgres
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: 5432
+
+
+    steps:
+      - name: Take code
+        uses: actions/checkout@v4.2.2
+
+      - name: Set up Python
+        uses: actions/setup-python@v5.6.0
+        with:
+          python-version: '3.13.3'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          python-version: '3.13'
+
+      - name: Install dependencies
+        run: uv sync --frozen --all-groups
+
+      - name: Ruff check
+        run: uv run ruff check .
+
+      - name: Run migrations
+        run: uv run python manage.py migrate
+
+      - name: Tests
+        run: uv run pytest
