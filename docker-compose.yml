@@ -9,15 +9,18 @@ services:
     build: .
     command: >
       sh -c "
-      python manage.py migrate &&
-      python manage.py runserver 0.0.0.0:8000"
+      uv run python manage.py migrate &&
+      uv run python manage.py runserver 0.0.0.0:8000"
     ports:
       - "8000:8000"
     volumes:
       - .:/app
+      - web_venv:/app/.venv
     env_file:
       - .env
     depends_on:
       - db
+
 volumes:
   postgres_data:
+  web_venv:
