@@ -5,7 +5,7 @@ from accounts.models import VerificationCode
 
 
 @shared_task
-def send_verification_email(email: str, code: int) -> None:
+def send_verification_email(email: str, code: str) -> None:
     send_mail(
         subject="Verification Email",
         message=f"Your verification code is {code}",
