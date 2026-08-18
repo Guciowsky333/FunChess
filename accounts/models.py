@@ -1,8 +1,8 @@
 from django.contrib.auth.models import AbstractUser
 from django.db import models
-from utilis import generate_verification_code
 
 from accounts.managers import CustomUserManager
+from accounts.utilis import generate_verification_code
 
 # Create your models here.
 
