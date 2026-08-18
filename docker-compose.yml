@@ -21,6 +21,22 @@ services:
     depends_on:
       - db
 
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  celery:
+    build: .
+    command: uv run celery -A config worker -l info
+    volumes:
+      - .:/app
+      - /app/.venv
+    depends_on:
+      - db
+      - redis
+    env_file:
+      - .env
 volumes:
   postgres_data:
   web_venv:
