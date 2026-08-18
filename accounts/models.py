@@ -1,5 +1,6 @@
 from django.contrib.auth.models import AbstractUser
 from django.db import models
+from utilis import generate_verification_code
 
 from accounts.managers import CustomUserManager
 
@@ -17,3 +18,8 @@ class CustomUser(AbstractUser):
 
     def __str__(self):
         return self.username
+
+
+class VerificationCode(models.Model):
+    code = models.CharField(max_length=6, unique=True, default=generate_verification_code)
+    email = models.EmailField(max_length=150, unique=True)
