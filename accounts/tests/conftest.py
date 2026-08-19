@@ -12,9 +12,7 @@ def celery_eager():
 
 @pytest.fixture
 def test_verification_code(db):
-    return VerificationCode.objects.create(
-        email="testuser@test.com",
-    )
+    return VerificationCode.objects.create(email="testuser@test.com", code="test")
 
 
 @pytest.fixture

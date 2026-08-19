@@ -22,3 +22,27 @@ class SendVerificationCodeSerializer(serializers.Serializer):
             raise serializers.ValidationError("We have already sent a verification code to this email")
 
         return data
+
+
+class CreateCustomUserSerializer(serializers.Serializer):
+    email = serializers.EmailField(required=True)
+    password = serializers.CharField(required=True, write_only=True)
+    password_2 = serializers.CharField(required=True, write_only=True)
+    username = serializers.CharField(required=True)
+    code = serializers.CharField(required=True, write_only=True, max_length=6)
+
+    def validate(self, data):
+        password = data["password"]
+        password_2 = data["password_2"]
+        email = data["email"]
+        username = data["username"]
+
+        validate_passwords(password, password_2)
+
+        if CustomUser.objects.filter(email=email).exists():
+            raise serializers.ValidationError("User with this email already exists")
+
+        if CustomUser.objects.filter(username=username).exists():
+            raise serializers.ValidationError("User with this username already exists")
+
+        return data

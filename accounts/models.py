@@ -10,6 +10,7 @@ from accounts.utilis import generate_verification_code
 class CustomUser(AbstractUser):
     username = models.CharField(max_length=150, unique=True)
     email = models.EmailField(max_length=150, unique=True)
+    avatar = models.ImageField(upload_to="avatar", null=True, blank=True)
 
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = ["username"]
