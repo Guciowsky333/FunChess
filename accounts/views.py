@@ -54,6 +54,32 @@ class CreateCustomUserAPIView(APIView):
     serializer_class = CreateCustomUserSerializer
     permission_classes = [AllowAny]
 
+    @extend_schema(
+        summary="Create new account",
+        description="""
+            Checks whether provided code is valid and creates new account.
+
+            Important: Users should first send request to the SendVerificationCodeAPIView endpoint to
+            receive verification code in their emails but to prevent situation where users would like to 
+            omit this endpoint we validate the same data here again 
+
+
+            Business rules:
+            - Fields email, password, password_2, username and code are required.
+            - Code must be valid and not expired (valid for 15 minutes).
+            - Email must be unique.
+            - Email must be in valid format (validated by Django EmailField).
+            - Username must be unique.
+            - Fields password and password_2 must be the same.
+            - Password must be at least 8 characters long.
+            - Password must contain at least one uppercase letter.
+            """,
+        request=CreateCustomUserSerializer,
+        responses={
+            201: OpenApiResponse(description="Account created successfully"),
+            400: OpenApiResponse(description="Validation error/ invalid code "),
+        },
+    )
     def post(self, request):
         serializer = self.serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)
