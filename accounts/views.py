@@ -40,8 +40,25 @@ class GoogleOAuth2View(APIView):
     permission_classes = [AllowAny]
     serializer_class = GoogleOAuth2Serializer
 
+    @extend_schema(
+        summary="Enables users to logg in and register with Google",
+        description="""
+        Returns access and refresh tokens for an account if google token is valid.
+        
+        Business rules:
+        - Field google_token is required.
+        - Google token must be valid.
+        - If user logg in first time username is required and it must be unique.
+        """,
+        request=GoogleOAuth2Serializer,
+        responses={
+            200: OpenApiResponse(description="Access and refresh tokens"),
+            400: OpenApiResponse(description="Validation error"),
+            429: OpenApiResponse(description="Too Many Requests in this endpoint max per minute = 5"),
+        },
+    )
     def post(self, request, *args, **kwargs):
-        serializer = GoogleOAuth2Serializer(data=request.data)
+        serializer = self.serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)
         google_token = serializer.validated_data["google_token"]
         username = serializer.validated_data.get("username")
