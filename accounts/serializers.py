@@ -46,3 +46,8 @@ class CreateCustomUserSerializer(serializers.Serializer):
             raise serializers.ValidationError("User with this username already exists")
 
         return data
+
+
+class GoogleOAuth2Serializer(serializers.Serializer):
+    google_token = serializers.CharField(required=True, write_only=True)
+    username = serializers.CharField(required=False)

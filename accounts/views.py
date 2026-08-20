@@ -7,8 +7,8 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.views import TokenObtainPairView
 
-from accounts.serializers import CreateCustomUserSerializer, SendVerificationCodeSerializer
-from accounts.services import create_CustomUser, create_verification_code
+from accounts.serializers import CreateCustomUserSerializer, GoogleOAuth2Serializer, SendVerificationCodeSerializer
+from accounts.services import create_CustomUser, create_verification_code, register_or_logg_in_with_google
 
 
 # Create your views here.
@@ -33,6 +33,21 @@ class ThrottledTokenObtainPairView(TokenObtainPairView):
     )
     def post(self, request, *args, **kwargs):
         return super().post(request, *args, **kwargs)
+
+
+class GoogleOAuth2View(APIView):
+    throttle_classes = [LoginRateThrottle]
+    permission_classes = [AllowAny]
+    serializer_class = GoogleOAuth2Serializer
+
+    def post(self, request, *args, **kwargs):
+        serializer = GoogleOAuth2Serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        google_token = serializer.validated_data["google_token"]
+        username = serializer.validated_data.get("username")
+
+        tokens = register_or_logg_in_with_google(google_token, username)
+        return Response(tokens, status=status.HTTP_200_OK)
 
 
 class SendVerificationCodeAPIView(APIView):
@@ -113,13 +128,10 @@ class CreateCustomUserAPIView(APIView):
         password = serializer.validated_data["password"]
         code = serializer.validated_data["code"]
 
-        try:
-            create_CustomUser(email, username, password, code)
-            return Response(
-                {
-                    "message": "Account created successfully.",
-                },
-                status=status.HTTP_201_CREATED,
-            )
-        except ValueError as e:
-            return Response({"message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        create_CustomUser(email, username, password, code)
+        return Response(
+            {
+                "message": "Account created successfully.",
+            },
+            status=status.HTTP_201_CREATED,
+        )

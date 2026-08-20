@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 import pytest
 from rest_framework import status
 from rest_framework.test import APIClient
@@ -159,3 +161,69 @@ def test_CreateCustomUserAPIView_invalid_data(payload, expected_status, test_ver
     client = APIClient()
     response = client.post("/api/accounts/create_account/", payload)
     assert response.status_code == expected_status
+
+
+# Tests for /api/accounts/google-login/
+@pytest.mark.django_db
+@patch("accounts.services.id_token.verify_oauth2_token")
+def test_GoogleOAuth2View(mock_verify_oauth2_token):
+    mock_verify_oauth2_token.return_value = {
+        "email": "newuser@gmail.com",
+    }
+    client = APIClient()
+    response = client.post(
+        "/api/accounts/google-login/",
+        {
+            "google_token": "fake-token-doesnt-matter",
+            "username": "new_username",
+        },
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert "access" and "refresh" in response.data
+    assert CustomUser.objects.filter(email="newuser@gmail.com", username="new_username").exists()
+
+
+@pytest.mark.django_db
+@patch("accounts.services.id_token.verify_oauth2_token")
+def test_GoogleOAuth2View_invalid_token(mock_verify_oauth2_token):
+    mock_verify_oauth2_token.side_effect = ValueError("Invalid or expired Google token")
+    client = APIClient()
+    response = client.post(
+        "/api/accounts/google-login/",
+        {
+            "google_token": "fake-token-doesnt-matter",
+            "username": "new_username",
+        },
+    )
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+
+@pytest.mark.django_db
+@patch("accounts.services.id_token.verify_oauth2_token")
+def test_GoogleOAuth2View_first_logg_in_without_username(mock_verify_oauth2_token):
+    mock_verify_oauth2_token.return_value = {
+        "email": "newuser@gmail.com",
+    }
+    client = APIClient()
+
+    # Lack username in body
+    response = client.post("/api/accounts/google-login/", {"google_token": "fake-token-doesnt-matter"})
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+
+@pytest.mark.django_db
+@patch("accounts.services.id_token.verify_oauth2_token")
+def test_GoogleOAuth2View_taken_username(mock_verify_oauth2_token, test_user):
+    mock_verify_oauth2_token.return_value = {
+        "email": "newuser@gmail.com",
+    }
+    client = APIClient()
+    response = client.post(
+        "/api/accounts/google-login/",
+        {
+            "google_token": "fake-token-doesnt-matter",
+            "username": f"{test_user.username}",
+        },
+    )
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
