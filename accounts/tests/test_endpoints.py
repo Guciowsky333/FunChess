@@ -227,3 +227,28 @@ def test_GoogleOAuth2View_taken_username(mock_verify_oauth2_token, test_user):
         },
     )
     assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+
+# Tests for /api/accounts/change_avatar/
+
+
+def test_ChangeAvatarAPIView(test_image, test_user):
+    client = APIClient()
+    client.force_authenticate(user=test_user)
+    body = {
+        "avatar": test_image,
+    }
+
+    response = client.patch("/api/accounts/change_avatar/", body)
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["message"] == "Avatar changed successfully."
+
+
+def test_ChangeAvatarAPIView_requires_authentication(test_image):
+    client = APIClient()
+    body = {
+        "avatar": test_image,
+    }
+
+    response = client.patch("/api/accounts/change_avatar/", body)
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED

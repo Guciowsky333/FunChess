@@ -1,13 +1,18 @@
 from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import status
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.views import TokenObtainPairView
 
-from accounts.serializers import CreateCustomUserSerializer, GoogleOAuth2Serializer, SendVerificationCodeSerializer
+from accounts.serializers import (
+    ChangeAvatarSerializer,
+    CreateCustomUserSerializer,
+    GoogleOAuth2Serializer,
+    SendVerificationCodeSerializer,
+)
 from accounts.services import create_CustomUser, create_verification_code, register_or_logg_in_with_google
 
 
@@ -151,4 +156,19 @@ class CreateCustomUserAPIView(APIView):
                 "message": "Account created successfully.",
             },
             status=status.HTTP_201_CREATED,
+        )
+
+
+class ChangeAvatarAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    serializer_class = ChangeAvatarSerializer
+
+    def patch(self, request):
+        serializer = self.serializer_class(request.user, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(
+            {
+                "message": "Avatar changed successfully.",
+            }
         )

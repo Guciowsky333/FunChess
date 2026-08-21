@@ -2,6 +2,7 @@ from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView
 
 from accounts.views import (
+    ChangeAvatarAPIView,
     CreateCustomUserAPIView,
     GoogleOAuth2View,
     SendVerificationCodeAPIView,
@@ -14,4 +15,5 @@ urlpatterns = [
     path("send_verification_code/", SendVerificationCodeAPIView.as_view(), name="send_verification_code"),
     path("create_account/", CreateCustomUserAPIView.as_view(), name="create_account"),
     path("google-login/", GoogleOAuth2View.as_view(), name="google-login"),
+    path("change_avatar/", ChangeAvatarAPIView.as_view(), name="change_avatar"),
 ]

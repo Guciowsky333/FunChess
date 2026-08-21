@@ -51,3 +51,9 @@ class CreateCustomUserSerializer(serializers.Serializer):
 class GoogleOAuth2Serializer(serializers.Serializer):
     google_token = serializers.CharField(required=True, write_only=True)
     username = serializers.CharField(required=False)
+
+
+class ChangeAvatarSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CustomUser
+        fields = ["avatar"]
