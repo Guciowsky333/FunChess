@@ -163,6 +163,23 @@ class ChangeAvatarAPIView(APIView):
     permission_classes = [IsAuthenticated]
     serializer_class = ChangeAvatarSerializer
 
+    @extend_schema(
+        summary="Updates the avatar of the currently authenticated user",
+        description="""
+        Updates the avatar for the logged-in user's account.
+
+        Business rules:
+        - Field avatar is required.
+        - Field avatar must be a valid image file (e.g. JPEG, PNG).
+        - Request user must be authenticated. 
+        """,
+        request=ChangeAvatarSerializer,
+        responses={
+            200: OpenApiResponse(description="Avatar updated successfully"),
+            400: OpenApiResponse(description="Validation error"),
+            401: OpenApiResponse(description="Authentication credentials were not provided"),
+        },
+    )
     def patch(self, request):
         serializer = self.serializer_class(request.user, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
