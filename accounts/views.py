@@ -9,6 +9,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 
 from accounts.serializers import (
     ChangeAvatarSerializer,
+    ChangePasswordSerializer,
     CreateCustomUserSerializer,
     GoogleOAuth2Serializer,
     ResetPasswordSerializer,
@@ -16,6 +17,7 @@ from accounts.serializers import (
     SentResetPasswordCodeSerializer,
 )
 from accounts.services import (
+    change_password,
     create_CustomUser,
     create_verification_code,
     register_or_logg_in_with_google,
@@ -267,5 +269,23 @@ class ResetPasswordAPIView(APIView):
         return Response(
             {
                 "message": "Password has been reset successfully.",
+            }
+        )
+
+
+class ChangePasswordAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    serializer_class = ChangePasswordSerializer
+
+    def patch(self, request):
+        serializer = self.serializer_class(request.user, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        old_password = serializer.validated_data["old_password"]
+        new_password = serializer.validated_data["new_password"]
+        user = request.user
+        change_password(user, old_password, new_password)
+        return Response(
+            {
+                "message": "Password has been changed successfully.",
             }
         )

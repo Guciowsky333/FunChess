@@ -21,7 +21,9 @@ def test_verification_code(db):
 
 @pytest.fixture
 def test_user(db):
-    return CustomUser.objects.create(email="testuser1@test1.com", username="test_username")
+    return CustomUser.objects.create_user(
+        email="testuser1@test1.com", username="test_username", password="Test_password"
+    )
 
 
 @pytest.fixture

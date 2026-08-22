@@ -3,6 +3,7 @@ from rest_framework_simplejwt.views import TokenRefreshView
 
 from accounts.views import (
     ChangeAvatarAPIView,
+    ChangePasswordAPIView,
     CreateCustomUserAPIView,
     GoogleOAuth2View,
     ResetPasswordAPIView,
@@ -20,4 +21,5 @@ urlpatterns = [
     path("change_avatar/", ChangeAvatarAPIView.as_view(), name="change_avatar"),
     path("send_reset_password_code/", SendResetPasswordCodeAPIView.as_view(), name="send_reset_password_code"),
     path("reset_password/", ResetPasswordAPIView.as_view(), name="reset_password"),
+    path("change_password/", ChangePasswordAPIView.as_view(), name="change_password"),
 ]

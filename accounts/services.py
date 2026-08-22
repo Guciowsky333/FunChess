@@ -92,3 +92,12 @@ def reset_password(new_password: str, email: str, code: str) -> None:
         user.set_password(new_password)
         user.save()
         verification_code.delete()
+
+
+def change_password(user: CustomUser, old_password: str, new_password: str) -> None:
+    if not user.check_password(old_password):
+        raise serializers.ValidationError("Invalid old password")
+    if old_password == new_password:
+        raise serializers.ValidationError("New password can't be the same as old password")
+    user.set_password(new_password)
+    user.save()

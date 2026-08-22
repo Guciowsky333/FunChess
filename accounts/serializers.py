@@ -84,3 +84,17 @@ class ResetPasswordSerializer(serializers.Serializer):
         validate_passwords(new_password, new_password_2)
 
         return data
+
+
+class ChangePasswordSerializer(serializers.Serializer):
+    old_password = serializers.CharField(required=True, write_only=True)
+    new_password = serializers.CharField(required=True, write_only=True)
+    new_password_2 = serializers.CharField(required=True, write_only=True)
+
+    def validate(self, data):
+        new_password = data["new_password"]
+        new_password_2 = data["new_password_2"]
+
+        validate_passwords(new_password, new_password_2)
+
+        return data

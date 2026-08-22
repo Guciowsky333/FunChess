@@ -340,3 +340,84 @@ def test_ResetPasswordAPIView_invalid_data(
     }
     response = client.post("/api/accounts/reset_password/", body)
     assert response.status_code == expected_status
+
+
+# Test for api/accounts/change_password/
+def test_ChangePasswordAPIView(test_user):
+    """
+    In this test test_user has password = "Test_password" and when user provided correct old_password
+    endpoint should change it to a new one
+    """
+    client = APIClient()
+    client.force_authenticate(test_user)
+    body = {
+        # test_user.password = "Test_password"
+        "old_password": "Test_password",
+        "new_password": "Test_new_password",
+        "new_password_2": "Test_new_password",
+    }
+    response = client.patch("/api/accounts/change_password/", body)
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["message"] == "Password has been changed successfully."
+    assert test_user.check_password(body["new_password"])
+
+
+@pytest.mark.parametrize(
+    # test_user.password = "Test_password"
+    "payload, expected_status",
+    [
+        # Incorrect old password
+        pytest.param(
+            {
+                "old_password": "incorrect_old_password",
+                "new_password": "Test_new_password",
+                "new_password_2": "Test_new_password",
+            },
+            status.HTTP_400_BAD_REQUEST,
+            id="Incorrect old password",
+        ),
+        # New password is the same as old password
+        pytest.param(
+            {"old_password": "Test_password", "new_password": "Test_password", "new_password_2": "Test_password"},
+            status.HTTP_400_BAD_REQUEST,
+            id="New password is the same as old password",
+        ),
+        # New password is too short
+        pytest.param(
+            {"old_password": "Test_password", "new_password": "Short", "new_password_2": "Short"},
+            status.HTTP_400_BAD_REQUEST,
+            id="Too short new password",
+        ),
+        # New password without uppercase
+        pytest.param(
+            {
+                "old_password": "Test_password",
+                "new_password": "without_uppercase",
+                "new_password_2": "without_uppercase",
+            },
+            status.HTTP_400_BAD_REQUEST,
+            id="New password without uppercase",
+        ),
+        # Fields new_password and new_password_2 are not the same
+        pytest.param(
+            {
+                "old_password": "Test_password",
+                "new_password": "Test_new_password_1",
+                "new_password_2": "Test_new_password_2",
+            },
+            status.HTTP_400_BAD_REQUEST,
+            id="New passwords not match",
+        ),
+    ],
+)
+def test_ChangePasswordAPIView_invalid_data(payload, expected_status, test_user):
+    client = APIClient()
+    client.force_authenticate(test_user)
+    response = client.patch("/api/accounts/change_password/", payload)
+    assert response.status_code == expected_status
+
+
+def test_ChangePasswordAPIView_requires_authentication():
+    client = APIClient()
+    response = client.patch("/api/accounts/change_password/")
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
