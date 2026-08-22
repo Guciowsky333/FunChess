@@ -25,6 +25,11 @@ def test_user(db):
 
 
 @pytest.fixture
+def test_verification_code_sent(test_user):
+    return VerificationCode.objects.create(email=f"{test_user.email}")
+
+
+@pytest.fixture
 def test_image():
     file = BytesIO()
     image = Image.new("RGB", (100, 100), color="red")

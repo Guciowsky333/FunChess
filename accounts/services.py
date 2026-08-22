@@ -73,3 +73,22 @@ def register_or_logg_in_with_google(token: str, username: str | None) -> dict[st
         "access": str(refresh.access_token),
         "refresh": str(refresh),
     }
+
+
+def reset_password(new_password: str, email: str, code: str) -> None:
+    """
+    Sets new password for user with provided email if verification code is valid.
+    Deletes the verification code after setting the new password.
+    """
+    user = CustomUser.objects.filter(email=email).first()
+    if not user:
+        raise serializers.ValidationError("User with provided email does not exist")
+
+    verification_code = VerificationCode.objects.filter(email=email, code=code).first()
+    if not verification_code:
+        raise serializers.ValidationError("Invalid code or email")
+
+    with transaction.atomic():
+        user.set_password(new_password)
+        user.save()
+        verification_code.delete()

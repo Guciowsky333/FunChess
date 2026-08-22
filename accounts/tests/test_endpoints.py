@@ -252,3 +252,91 @@ def test_ChangeAvatarAPIView_requires_authentication(test_image):
 
     response = client.patch("/api/accounts/change_avatar/", body)
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+# Test for api/accounts/send_reset_password_code/
+def test_SendResetPasswordCodeAPIView(test_user):
+    client = APIClient()
+    body = {
+        "email": test_user.email,
+    }
+    response = client.post("/api/accounts/send_reset_password_code/", body)
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["message"] == "Code has been sent to your email it will expire in 15 minutes."
+
+
+def test_SendResetPasswordCodeAPIView_not_existing_email(test_user):
+    client = APIClient()
+    body = {
+        "email": "not_existing_email@test.com",
+    }
+    response = client.post("/api/accounts/send_reset_password_code/", body)
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+
+def test_SendResetPasswordCodeAPIView_not_existing_password(test_user, test_verification_code_sent):
+    """
+    In this case, the test user already has a code sent to their email address, so they cannot generate another one
+    """
+    client = APIClient()
+    body = {
+        "email": test_user.email,
+    }
+    response = client.post("/api/accounts/send_reset_password_code/", body)
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+
+# Test for api/accounts/reset_password/
+
+
+def test_ResetPasswordAPIView(test_user, test_verification_code_sent):
+    client = APIClient()
+    body = {
+        "email": test_user.email,
+        "new_password": "New_password",
+        "new_password_2": "New_password",
+        "code": f"{test_verification_code_sent.code}",
+    }
+    response = client.post("/api/accounts/reset_password/", body)
+    test_user.refresh_from_db()
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["message"] == "Password has been reset successfully."
+    assert test_user.check_password(body["new_password"])
+
+
+@pytest.mark.parametrize(
+    "email_override, code_override, new_password, new_password_2, expected_status",
+    [
+        # All passwords errors email and code are correct
+        pytest.param(None, None, "Short", "Short", status.HTTP_400_BAD_REQUEST, id="Too short password"),
+        pytest.param(
+            None, None, "Test_password_1", "Test_password_2", status.HTTP_400_BAD_REQUEST, id="Passwords are not match"
+        ),
+        pytest.param(
+            None, None, "test_password", "test_password", status.HTTP_400_BAD_REQUEST, id="Password without uppercase"
+        ),
+        # All email or code errors passwords are correct
+        pytest.param(
+            "not_existing_email@test.com",
+            None,
+            "Test_password",
+            "Test_password",
+            status.HTTP_400_BAD_REQUEST,
+            id="Email doesn't exist",
+        ),
+        pytest.param(None, "wrong", "Test_password", "Test_password", status.HTTP_400_BAD_REQUEST, id="Invalid code"),
+    ],
+)
+def test_ResetPasswordAPIView_invalid_data(
+    email_override, code_override, new_password, new_password_2, expected_status, test_user, test_verification_code_sent
+):
+
+    client = APIClient()
+    body = {
+        "email": email_override or test_user.email,
+        "code": code_override or test_verification_code_sent.code,
+        "new_password": new_password,
+        "new_password_2": new_password_2,
+    }
+    response = client.post("/api/accounts/reset_password/", body)
+    assert response.status_code == expected_status

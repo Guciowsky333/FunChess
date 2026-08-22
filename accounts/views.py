@@ -11,9 +11,16 @@ from accounts.serializers import (
     ChangeAvatarSerializer,
     CreateCustomUserSerializer,
     GoogleOAuth2Serializer,
+    ResetPasswordSerializer,
     SendVerificationCodeSerializer,
+    SentResetPasswordCodeSerializer,
 )
-from accounts.services import create_CustomUser, create_verification_code, register_or_logg_in_with_google
+from accounts.services import (
+    create_CustomUser,
+    create_verification_code,
+    register_or_logg_in_with_google,
+    reset_password,
+)
 
 
 # Create your views here.
@@ -187,5 +194,39 @@ class ChangeAvatarAPIView(APIView):
         return Response(
             {
                 "message": "Avatar changed successfully.",
+            }
+        )
+
+
+class SendResetPasswordCodeAPIView(APIView):
+    permission_classes = [AllowAny]
+    serializer_class = SentResetPasswordCodeSerializer
+
+    def post(self, request):
+        serializer = self.serializer_class(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        email = serializer.validated_data["email"]
+        create_verification_code(email)
+        return Response(
+            {
+                "message": "Code has been sent to your email it will expire in 15 minutes.",
+            }
+        )
+
+
+class ResetPasswordAPIView(APIView):
+    permission_classes = [AllowAny]
+    serializer_class = ResetPasswordSerializer
+
+    def post(self, request):
+        serializer = self.serializer_class(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        email = serializer.validated_data["email"]
+        new_password = serializer.validated_data["new_password"]
+        code = serializer.validated_data["code"]
+        reset_password(new_password, email, code)
+        return Response(
+            {
+                "message": "Password has been reset successfully.",
             }
         )
