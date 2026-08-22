@@ -202,6 +202,23 @@ class SendResetPasswordCodeAPIView(APIView):
     permission_classes = [AllowAny]
     serializer_class = SentResetPasswordCodeSerializer
 
+    @extend_schema(
+        summary="Send reset password code",
+        description="""
+        Sends verification code to user with provided email to reset password.
+        Verification code will be valid for only 15 minutes.
+        
+        Business rules:
+        - Field email is required.
+        - User with provided email must exist.
+        - If a verification code has been sent to the user, they cannot generate another one.
+        """,
+        request=SendVerificationCodeSerializer,
+        responses={
+            200: OpenApiResponse(description="Verification code sent successfully"),
+            400: OpenApiResponse(description="Validation error"),
+        },
+    )
     def post(self, request):
         serializer = self.serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -218,6 +235,28 @@ class ResetPasswordAPIView(APIView):
     permission_classes = [AllowAny]
     serializer_class = ResetPasswordSerializer
 
+    @extend_schema(
+        summary="Sets new password",
+        description="""
+        This endpoint is used when users forget their passwords and want to reset it
+        using a verification code sent to their emails.
+            
+        Important: Before using this endpoint, you must first send a request to
+        SendResetPasswordCodeAPIView to receive a verification code.
+        
+        Business rules:
+        - Field email, new_password, new_password_2 and code are required.
+        - User with provided email must exist.
+        - Code must be valid and associated to user's email.
+        - New password must contain at least 8 characters and one uppercase letter.
+        - Filed new_password and new_password_2 must be the same.
+        """,
+        request=ResetPasswordSerializer,
+        responses={
+            200: OpenApiResponse(description="New password set successfully"),
+            400: OpenApiResponse(description="Validation error"),
+        },
+    )
     def post(self, request):
         serializer = self.serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)
