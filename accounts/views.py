@@ -277,6 +277,26 @@ class ChangePasswordAPIView(APIView):
     permission_classes = [IsAuthenticated]
     serializer_class = ChangePasswordSerializer
 
+    @extend_schema(
+        summary="Change password",
+        description="""
+        Change password of request user to a new one if they provided the correct old password.
+        
+        Business rules:
+        - Field old_password, new_password, new_password_2 are required.
+        - Old password must be the same as current request user password.
+        - New password cannot be the same as old password.
+        - New password must contain at least 8 characters and one uppercase letter.
+        - Filed new_password and new_password_2 must be the same.
+        - Request user must be authenticated.
+        """,
+        request=ChangePasswordSerializer,
+        responses={
+            200: OpenApiResponse(description="New password changed successfully"),
+            400: OpenApiResponse(description="Validation error"),
+            401: OpenApiResponse(description="Authentication credentials were not provided"),
+        },
+    )
     def patch(self, request):
         serializer = self.serializer_class(request.user, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
