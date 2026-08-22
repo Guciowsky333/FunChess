@@ -316,6 +316,23 @@ class ChangeUsernameAPIView(APIView):
     permission_classes = [IsAuthenticated]
     serializer_class = ChangeUsernameSerializer
 
+    @extend_schema(
+        summary="Change username",
+        description="""
+        Change username of request user
+        
+        Business rules:
+        - Field new_username is required.
+        - There cannot be other user with provided username.
+        - Request user must be authenticated.
+        """,
+        request=ChangeUsernameSerializer,
+        responses={
+            200: OpenApiResponse(description="New username changed successfully"),
+            400: OpenApiResponse(description="Validation error"),
+            401: OpenApiResponse(description="Authentication credentials were not provided"),
+        },
+    )
     def patch(self, request):
         serializer = self.serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)
