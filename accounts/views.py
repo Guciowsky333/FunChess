@@ -10,6 +10,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from accounts.serializers import (
     ChangeAvatarSerializer,
     ChangePasswordSerializer,
+    ChangeUsernameSerializer,
     CreateCustomUserSerializer,
     GoogleOAuth2Serializer,
     ResetPasswordSerializer,
@@ -298,7 +299,7 @@ class ChangePasswordAPIView(APIView):
         },
     )
     def patch(self, request):
-        serializer = self.serializer_class(request.user, data=request.data, partial=True)
+        serializer = self.serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)
         old_password = serializer.validated_data["old_password"]
         new_password = serializer.validated_data["new_password"]
@@ -307,5 +308,22 @@ class ChangePasswordAPIView(APIView):
         return Response(
             {
                 "message": "Password has been changed successfully.",
+            }
+        )
+
+
+class ChangeUsernameAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    serializer_class = ChangeUsernameSerializer
+
+    def patch(self, request):
+        serializer = self.serializer_class(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        new_username = serializer.validated_data["new_username"]
+        request.user.username = new_username
+        request.user.save()
+        return Response(
+            {
+                "message": "Username has been changed successfully.",
             }
         )

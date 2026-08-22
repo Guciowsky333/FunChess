@@ -98,3 +98,12 @@ class ChangePasswordSerializer(serializers.Serializer):
         validate_passwords(new_password, new_password_2)
 
         return data
+
+
+class ChangeUsernameSerializer(serializers.Serializer):
+    new_username = serializers.CharField(required=True)
+
+    def validate_new_username(self, new_username):
+        if CustomUser.objects.filter(username=new_username).exists():
+            raise serializers.ValidationError("User with this username already exists")
+        return new_username

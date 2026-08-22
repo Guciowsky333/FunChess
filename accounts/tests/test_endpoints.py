@@ -421,3 +421,31 @@ def test_ChangePasswordAPIView_requires_authentication():
     client = APIClient()
     response = client.patch("/api/accounts/change_password/")
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+# Test for api/accounts/change_username/
+def test_ChangeUsernameAPIView(test_user):
+    client = APIClient()
+    client.force_authenticate(test_user)
+    body = {
+        "new_username": "Test_new_username",
+    }
+    response = client.patch("/api/accounts/change_username/", body)
+    assert response.status_code == status.HTTP_200_OK
+    assert test_user.username == body["new_username"]
+
+
+def test_ChangeUsernameAPIView_new_username_taken(test_user, test_user_2):
+    client = APIClient()
+    client.force_authenticate(test_user)
+    body = {
+        "new_username": f"{test_user_2.username}",
+    }
+    response = client.patch("/api/accounts/change_username/", body)
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+
+def test_ChangeUsernameAPIView_required_authentication():
+    client = APIClient()
+    response = client.patch("/api/accounts/change_username/")
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
