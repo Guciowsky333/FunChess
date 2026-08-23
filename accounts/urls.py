@@ -7,6 +7,7 @@ from accounts.views import (
     ChangeUsernameAPIView,
     CreateCustomUserAPIView,
     GoogleOAuth2View,
+    LogoutAPIView,
     ResetPasswordAPIView,
     SendResetPasswordCodeAPIView,
     SendVerificationCodeAPIView,
@@ -24,4 +25,5 @@ urlpatterns = [
     path("reset_password/", ResetPasswordAPIView.as_view(), name="reset_password"),
     path("change_password/", ChangePasswordAPIView.as_view(), name="change_password"),
     path("change_username/", ChangeUsernameAPIView.as_view(), name="change_username"),
+    path("logout/", LogoutAPIView.as_view(), name="logout"),
 ]

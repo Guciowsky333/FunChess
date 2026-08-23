@@ -1,10 +1,12 @@
 from drf_spectacular.utils import OpenApiResponse, extend_schema
-from rest_framework import status
+from rest_framework import serializers, status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle
 from rest_framework.views import APIView
+from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
 from accounts.serializers import (
@@ -13,6 +15,7 @@ from accounts.serializers import (
     ChangeUsernameSerializer,
     CreateCustomUserSerializer,
     GoogleOAuth2Serializer,
+    LogoutSerializer,
     ResetPasswordSerializer,
     SendVerificationCodeSerializer,
     SentResetPasswordCodeSerializer,
@@ -344,3 +347,37 @@ class ChangeUsernameAPIView(APIView):
                 "message": "Username has been changed successfully.",
             }
         )
+
+
+class LogoutAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    serializer_class = LogoutSerializer
+
+    @extend_schema(
+        summary="Logout",
+        description="""
+            Add user refresh token to blacklist, after this, user cannot use this refresh token
+            to take access token.
+
+            Business rules:
+            - Fields refresh_token is required.
+            - Specified refresh_token must be correct and not added to blacklist.
+            - Authentication required.
+            """,
+        request=LogoutSerializer,
+        responses={
+            200: OpenApiResponse(description="Account logout successfully"),
+            400: OpenApiResponse(description="Validation error/ invalid refresh token"),
+            401: OpenApiResponse(description="Unauthorized"),
+        },
+    )
+    def post(self, request):
+        serializer = self.serializer_class(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            token = RefreshToken(serializer.validated_data["refresh_token"])
+            token.blacklist()
+            return Response({"message": "Logged out successfully."})
+
+        except TokenError:
+            raise serializers.ValidationError("Invalid or already blacklisted token")

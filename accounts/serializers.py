@@ -107,3 +107,7 @@ class ChangeUsernameSerializer(serializers.Serializer):
         if CustomUser.objects.filter(username=new_username).exists():
             raise serializers.ValidationError("User with this username already exists")
         return new_username
+
+
+class LogoutSerializer(serializers.Serializer):
+    refresh_token = serializers.CharField(required=True)

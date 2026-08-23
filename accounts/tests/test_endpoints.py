@@ -3,6 +3,7 @@ from unittest.mock import patch
 import pytest
 from rest_framework import status
 from rest_framework.test import APIClient
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from accounts.models import CustomUser, VerificationCode
 
@@ -448,4 +449,58 @@ def test_ChangeUsernameAPIView_new_username_taken(test_user, test_user_2):
 def test_ChangeUsernameAPIView_required_authentication():
     client = APIClient()
     response = client.patch("/api/accounts/change_username/")
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+# Tests for /api/accounts/logout/
+def test_LogoutAPIView(test_user):
+    client = APIClient()
+    client.force_authenticate(test_user)
+
+    refresh_token = RefreshToken.for_user(test_user)
+    body = {
+        "refresh_token": f"{str(refresh_token)}",
+    }
+    response = client.post("/api/accounts/logout/", body)
+    assert response.status_code == status.HTTP_200_OK
+
+
+@pytest.mark.parametrize(
+    "payload, expected_status",
+    [
+        pytest.param(
+            {"refresh_token": ""},
+            status.HTTP_400_BAD_REQUEST,
+            id="Empty refresh token in body",
+        ),
+        pytest.param(
+            {"refresh_token": "Invalid"},
+            status.HTTP_400_BAD_REQUEST,
+            id="Invalid refresh token in body",
+        ),
+    ],
+)
+def test_LogoutAPIView_invalid_or_empty_refresh_token(payload, expected_status, test_user):
+    client = APIClient()
+    client.force_authenticate(test_user)
+    response = client.post("/api/accounts/logout/", payload)
+    assert response.status_code == expected_status
+
+
+def test_LogoutAPIView_blacklisted_refresh_token(test_user):
+    client = APIClient()
+    client.force_authenticate(test_user)
+
+    refresh_token = RefreshToken.for_user(test_user)
+    refresh_token.blacklist()
+    body = {
+        "refresh_token": f"{str(refresh_token)}",
+    }
+    response = client.post("/api/accounts/logout/", body)
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+
+def test_LogoutAPIView_required_authentication():
+    client = APIClient()
+    response = client.get("/api/accounts/logout/")
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
