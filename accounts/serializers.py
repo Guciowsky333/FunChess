@@ -111,3 +111,9 @@ class ChangeUsernameSerializer(serializers.Serializer):
 
 class LogoutSerializer(serializers.Serializer):
     refresh_token = serializers.CharField(required=True)
+
+
+class MeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CustomUser
+        fields = ["id", "email", "username", "avatar", "date_joined"]

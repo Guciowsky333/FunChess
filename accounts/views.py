@@ -16,6 +16,7 @@ from accounts.serializers import (
     CreateCustomUserSerializer,
     GoogleOAuth2Serializer,
     LogoutSerializer,
+    MeSerializer,
     ResetPasswordSerializer,
     SendVerificationCodeSerializer,
     SentResetPasswordCodeSerializer,
@@ -381,3 +382,25 @@ class LogoutAPIView(APIView):
 
         except TokenError:
             raise serializers.ValidationError("Invalid or already blacklisted token")
+
+
+class MeAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    serializer_class = MeSerializer
+
+    @extend_schema(
+        summary="Get account details",
+        description="""
+          Returns account details about the currently logged in user.
+
+          Business rules:
+          - Request user must be authenticated.
+          """,
+        responses={
+            200: OpenApiResponse(description="Account details"),
+            401: OpenApiResponse(description="Not authorized user"),
+        },
+    )
+    def get(self, request):
+        serializer = self.serializer_class(request.user)
+        return Response(serializer.data)

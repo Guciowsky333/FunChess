@@ -504,3 +504,20 @@ def test_LogoutAPIView_required_authentication():
     client = APIClient()
     response = client.get("/api/accounts/logout/")
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+# Test for /api/accounts/me/
+def test_MeAPIView(test_user):
+    client = APIClient()
+    client.force_authenticate(test_user)
+    response = client.get("/api/accounts/me/")
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["username"] == test_user.username
+    assert response.data["email"] == test_user.email
+    assert response.data["id"] == test_user.id
+
+
+def test_MeAPIView_required_authentication():
+    client = APIClient()
+    response = client.get("/api/accounts/me/")
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
