@@ -1,7 +1,7 @@
 from django.core.exceptions import ValidationError
 
 
-def validate_move(value):
+def validate_chess_square(value):
     if len(value) != 2:
         raise ValidationError(f"{value} is not a valid chess square")
 

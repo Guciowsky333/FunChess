@@ -1,7 +1,7 @@
 from django.conf import settings
 from django.db import models
 
-from games.validators import validate_move
+from games.validators import validate_chess_square
 
 # Create your models here.
 
@@ -66,8 +66,8 @@ class Move(models.Model):
     ply_number = models.PositiveIntegerField()
 
     # e4 d4 etc
-    from_square = models.CharField(max_length=2, validators=[validate_move])
-    to_square = models.CharField(max_length=2, validators=[validate_move])
+    from_square = models.CharField(max_length=2, validators=[validate_chess_square])
+    to_square = models.CharField(max_length=2, validators=[validate_chess_square])
 
     piece = models.CharField(choices=Piece.choices, max_length=1)
     promotion = models.CharField(choices=Piece.choices, max_length=1, null=True, blank=True)
