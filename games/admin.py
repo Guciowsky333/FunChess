@@ -1,11 +1,8 @@
 from django.contrib import admin
 
-from games.models import UserRating
+from games.models import TimeControl
 
 
-@admin.register(UserRating)
-class UserRatingAdmin(admin.ModelAdmin):
-    list_display = ["user", "get_user_username", "rating", "category"]
-
-    def get_user_username(self, obj):
-        return obj.user.username
+@admin.register(TimeControl)
+class TimeControlAdmin(admin.ModelAdmin):
+    list_display = ["category", "initial_time_seconds", "increment_seconds"]
