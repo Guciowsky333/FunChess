@@ -13,7 +13,7 @@ class UserRating(models.Model):
         RAPID = "rapid", "Rapid"
 
     category = models.CharField(choices=Category.choices, max_length=6)
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="ratings")
     rating = models.PositiveIntegerField(default=300)
 
     class Meta:

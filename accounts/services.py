@@ -7,6 +7,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from accounts.models import CustomUser, VerificationCode
 from accounts.tasks import delete_verification_code, send_verification_email
+from games.models import UserRating
 
 
 def create_verification_code(email: str) -> None:
@@ -101,3 +102,15 @@ def change_password(user: CustomUser, old_password: str, new_password: str) -> N
         raise serializers.ValidationError("New password can't be the same as old password")
     user.set_password(new_password)
     user.save()
+
+
+def create_all_ratings(user: CustomUser) -> None:
+    """
+    Creates all type of ratings with default rating = 300
+    for provided user
+    """
+    for category in UserRating.Category.choices:
+        UserRating.objects.create(
+            user=user,
+            category=category[0],
+        )

@@ -2,6 +2,7 @@ from rest_framework import serializers
 
 from accounts.models import CustomUser, VerificationCode
 from accounts.validators import validate_passwords
+from games.serializers import UserRatingSerializer
 
 
 class SendVerificationCodeSerializer(serializers.Serializer):
@@ -114,6 +115,15 @@ class LogoutSerializer(serializers.Serializer):
 
 
 class MeSerializer(serializers.ModelSerializer):
+    ratings = serializers.SerializerMethodField()
+
     class Meta:
         model = CustomUser
-        fields = ["id", "email", "username", "avatar", "date_joined"]
+        fields = ["id", "email", "username", "avatar", "date_joined", "ratings"]
+
+    def get_ratings(self, obj):
+        """
+        Ratings are sorted from highest to lowest.
+        """
+        ratings = obj.ratings.order_by("-rating")
+        return UserRatingSerializer(ratings, many=True).data
