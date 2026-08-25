@@ -517,6 +517,40 @@ def test_MeAPIView(test_user):
     assert response.data["id"] == test_user.id
 
 
+def test_MeAPIView_ratings(test_user):
+    """
+    Checks if our endpoint correctly returns all type of user's ratings.
+    First should be the highest one.
+    In this test we manually set rapid ratings as "500", blitz as "300"
+    and bullet as "100" and our endpoint should return them it this order
+    """
+    rapid = test_user.ratings.get(category="rapid")
+    rapid.rating = 500
+    rapid.save()
+
+    blitz = test_user.ratings.get(category="blitz")
+    blitz.rating = 300
+    blitz.save()
+
+    bullet = test_user.ratings.get(category="bullet")
+    bullet.rating = 100
+    bullet.save()
+
+    client = APIClient()
+    client.force_authenticate(test_user)
+    response = client.get("/api/accounts/me/")
+    assert response.status_code == status.HTTP_200_OK
+    # First should be "rapid"
+    assert response.data["ratings"][0]["rating"] == rapid.rating
+    assert response.data["ratings"][0]["category"] == rapid.category
+    # Second should be "blitz"
+    assert response.data["ratings"][1]["rating"] == blitz.rating
+    assert response.data["ratings"][1]["category"] == blitz.category
+    # Last should be "bullet"
+    assert response.data["ratings"][2]["rating"] == bullet.rating
+    assert response.data["ratings"][2]["category"] == bullet.category
+
+
 def test_MeAPIView_required_authentication():
     client = APIClient()
     response = client.get("/api/accounts/me/")
