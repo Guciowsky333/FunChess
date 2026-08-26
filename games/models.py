@@ -47,6 +47,10 @@ class Game(models.Model):
     black_player = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="games_as_black")
     time_control = models.ForeignKey(TimeControl, on_delete=models.CASCADE)
 
+    white_time_remaining = models.PositiveIntegerField(null=True, blank=True)
+    black_time_remaining = models.PositiveIntegerField(null=True, blank=True)
+    current_turn_started_at = models.PositiveIntegerField(null=True, blank=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
     finished_at = models.DateTimeField(null=True, blank=True)
 
