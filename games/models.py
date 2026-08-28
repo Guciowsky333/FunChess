@@ -64,7 +64,7 @@ class Move(models.Model):
         QUEEN = "Q", "Queen"
         KING = "K", "King"
 
-    game = models.ForeignKey(Game, on_delete=models.CASCADE)
+    game = models.ForeignKey(Game, on_delete=models.CASCADE, related_name="moves")
     player = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
 
     ply_number = models.PositiveIntegerField()
