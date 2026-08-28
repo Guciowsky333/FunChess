@@ -42,14 +42,14 @@ class Game(models.Model):
         DRAW = "draw", "Draw"
         IN_PROGRESS = "in_progress", "In Progress"
 
-    result = models.CharField(choices=Result.choices, max_length=11)
+    result = models.CharField(choices=Result.choices, max_length=11, default=Result.IN_PROGRESS)
     white_player = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="games_as_white")
     black_player = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="games_as_black")
     time_control = models.ForeignKey(TimeControl, on_delete=models.CASCADE)
 
     white_time_remaining = models.PositiveIntegerField(null=True, blank=True)
     black_time_remaining = models.PositiveIntegerField(null=True, blank=True)
-    current_turn_started_at = models.PositiveIntegerField(null=True, blank=True)
+    current_turn_started_at = models.DateTimeField(null=True, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     finished_at = models.DateTimeField(null=True, blank=True)
