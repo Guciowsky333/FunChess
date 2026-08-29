@@ -40,9 +40,18 @@ class Game(models.Model):
         WHITE_WON = "white_won", "White Won"
         BLACK_WON = "black_won", "Black Won"
         DRAW = "draw", "Draw"
-        IN_PROGRESS = "in_progress", "In Progress"
 
-    result = models.CharField(choices=Result.choices, max_length=11, default=Result.IN_PROGRESS)
+    class Status(models.TextChoices):
+        WAITING = "waiting", "Waiting"
+        IN_PROGRESS = "in_progress", "In Progress"
+        FINISHED = "finished", "Finished"
+
+    result = models.CharField(choices=Result.choices, max_length=9, blank=True, null=True)
+
+    status = models.CharField(choices=Status.choices, max_length=11, default=Status.WAITING)
+    white_connected = models.BooleanField(default=False)
+    black_connected = models.BooleanField(default=False)
+
     white_player = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="games_as_white")
     black_player = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="games_as_black")
     time_control = models.ForeignKey(TimeControl, on_delete=models.CASCADE)
