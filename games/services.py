@@ -1,8 +1,44 @@
 import chess
+from channels.db import database_sync_to_async
+from django.utils import timezone
 from rest_framework import serializers
 
 from accounts.models import CustomUser
+from games.exceptions import GameDoesNotExist, PlayerDoesNotBelongToGameError
 from games.models import Game, Move
+
+
+@database_sync_to_async
+def connect_player_to_game(game_id: int, user: CustomUser):
+    """
+    Checks if provided game exist and whether user belongs to this game.
+
+    If user belongs to this game sets up fields "white_connected" or "black_connected"
+    to "true" depending on what kind of player provided user is in this game.
+
+    If both players are connected and the game is in WAITING status,
+    changes the game status to IN_PROGRESS and sets
+    "current_turn_started_at" to the current time.
+    """
+    try:
+        game = Game.objects.select_related("white_player", "black_player").get(id=game_id)
+    except Game.DoesNotExist:
+        raise GameDoesNotExist
+
+    if game.white_player == user:
+        game.white_connected = True
+
+    elif game.black_player == user:
+        game.black_connected = True
+
+    else:
+        raise PlayerDoesNotBelongToGameError
+
+    # Changes game status to IN_PROGRESS only if current game status is WAITING
+    if game.white_connected and game.black_connected and game.status == Game.Status.WAITING:
+        game.status = Game.Status.IN_PROGRESS
+        game.current_turn_started_at = timezone.now()
+    game.save()
 
 
 def process_move(game: Game, user: CustomUser, move_uci: str) -> Move:

@@ -1,6 +1,14 @@
 import pytest
 
+from accounts.models import CustomUser
 from games.models import Game, Move, TimeControl
+
+
+@pytest.fixture
+def test_user_not_belongs_to_game(db):
+    return CustomUser.objects.create_user(
+        email="testuser1@notbelongtogame.com", username="test_username_", password="Test_password"
+    )
 
 
 @pytest.fixture
