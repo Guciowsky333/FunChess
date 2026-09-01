@@ -54,7 +54,7 @@ class Game(models.Model):
 
     white_player = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="games_as_white")
     black_player = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="games_as_black")
-    time_control = models.ForeignKey(TimeControl, on_delete=models.CASCADE)
+    time_control = models.ForeignKey(TimeControl, on_delete=models.CASCADE, related_name="time_control")
 
     white_time_remaining = models.PositiveIntegerField(null=True, blank=True)
     black_time_remaining = models.PositiveIntegerField(null=True, blank=True)

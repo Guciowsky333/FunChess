@@ -41,6 +41,18 @@ def connect_player_to_game(game_id: int, user: CustomUser):
     game.save()
 
 
+def get_current_turn_player(game: Game) -> CustomUser:
+    """
+    Return user that currently has a turn.
+    If the game has an even number of moves it meant that it is white's turn.
+    If the game has an odds number of moves it meant that it is black's turn.
+    """
+    if game.moves.count() % 2 == 0:
+        return game.white_player
+    else:
+        return game.black_player
+
+
 def process_move(game: Game, user: CustomUser, move_uci: str) -> Move:
     """
     Checks if provided move is valid at current chess position

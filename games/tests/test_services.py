@@ -2,7 +2,7 @@ import pytest
 from rest_framework import serializers
 
 from games.models import Move
-from games.services import process_move
+from games.services import get_current_turn_player, process_move
 
 
 def test_process_move_valid_first_move(test_game):
@@ -69,3 +69,32 @@ def test_process_move_Illegal_move(test_game):
     with pytest.raises(serializers.ValidationError):
         process_move(test_game, test_game.white_player, "e2e5")
     assert not Move.objects.exists()
+
+
+def test_get_current_turn_player_white_turn(test_game):
+    """
+    test game has 0 moves so function "get_current_turn" should return
+    player which play as white in this game
+    """
+    player = get_current_turn_player(test_game)
+    assert player == test_game.white_player
+
+
+def test_get_current_turn_player_black_turn(test_game):
+    """
+    In this test we manually create 1 move in test_game so function "get_current_turn_player"
+    should return player which play as black in this game because numbers of moves in test_game
+    is now odds so this mean that black has turn right now.
+    """
+    Move.objects.create(
+        game=test_game,
+        player=test_game.white_player,
+        ply_number=1,
+        from_square="d2",
+        to_square="d4",
+        piece="P",
+        resulting_fen="rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq d3 0 1",
+    )
+
+    player = get_current_turn_player(test_game)
+    assert player == test_game.black_player
