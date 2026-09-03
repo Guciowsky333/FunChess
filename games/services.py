@@ -4,7 +4,7 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from accounts.models import CustomUser
-from games.exceptions import GameDoesNotExist, PlayerDoesNotBelongToGameError
+from games.exceptions import ExceededTimeError, GameDoesNotExist, PlayerDoesNotBelongToGameError
 from games.models import Game, Move
 
 
@@ -51,6 +51,51 @@ def get_current_turn_player(game: Game) -> CustomUser:
         return game.white_player
     else:
         return game.black_player
+
+
+def check_or_update_time(game: Game, user: CustomUser):
+    """
+    Checks if user does not exceed time limit at game.
+    If yes game is over and user lose it if no subtracts time that user spend
+    to make a move and add increment time if game has it.
+    """
+
+    time_spend = (timezone.now() - game.current_turn_started_at).total_seconds()
+
+    is_white = user == game.white_player
+    time_remaining = game.white_time_remaining if is_white else game.black_time_remaining
+
+    # If user exceed time control the game is over
+    if time_remaining - time_spend <= 0:
+        game.status = Game.Status.FINISHED
+        last_move = game.moves.order_by("-ply_number").first()
+
+        if not last_move:
+            # If it is the first move we take initial chess position
+            board = chess.Board()
+        else:
+            # If not we take position from last move at the game
+            board = chess.Board(last_move.resulting_fen)
+
+        # Checks if user's opponent has enough material to deliver checkmate.
+        # If not game result is draw. "not is_white" because we check user's opponent
+        if board.has_insufficient_material(not is_white):
+            game.result = Game.Result.DRAW
+        else:
+            game.result = Game.Result.BLACK_WON if is_white else Game.Result.WHITE_WON
+
+        game.finished_at = timezone.now()
+        game.save()
+        raise ExceededTimeError
+
+    # If user does not exceed time we set up new remaining time for user
+    new_time_remaining = round((time_remaining - time_spend + game.time_control.increment_seconds), 0)
+    if is_white:
+        game.white_time_remaining = new_time_remaining
+
+    else:
+        game.black_time_remaining = new_time_remaining
+    game.save()
 
 
 def process_move(game: Game, user: CustomUser, move_uci: str) -> Move:
