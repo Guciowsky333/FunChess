@@ -4,9 +4,125 @@ import pytest
 from django.utils import timezone
 from rest_framework import serializers
 
-from games.exceptions import ExceededTimeError
+from games.exceptions import (
+    DrawOfferAlreadyExists,
+    DrawOfferNotFound,
+    ExceededTimeError,
+    InvalidAction,
+    NotOpponentDrawOffer,
+)
 from games.models import Game, Move
-from games.services import check_or_update_time, get_current_turn_player, process_move
+from games.services import check_or_update_time, get_current_turn_player, process_move, validate_action
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        pytest.param({"type": "move", "from_square": "e2", "to_square": "e4"}, id="Move type"),
+        pytest.param({"type": "chat", "text": "test text"}, id="Chat type"),
+        pytest.param({"type": "resign"}, id="resign type"),
+        pytest.param({"type": "draw_offer"}, id="draw_offer type"),
+        pytest.param({"type": "draw_accept"}, id="draw_accept type"),
+        pytest.param({"type": "draw_reject"}, id="draw_reject type"),
+    ],
+)
+def test_validate_action_valid_body(test_game, body):
+    """
+    In this test we check all available types in function "validate_action"
+    """
+    # If type is "draw_accept" or "draw_reject" we set draw_offered_by as black
+    # and then call function with white player
+    if body["type"] == "draw_accept" or body["type"] == "draw_reject":
+        test_game.draw_offered_by = Game.DrawOfferedBy.BLACK
+
+    result = validate_action(body, test_game, test_game.white_player)
+    assert result == body
+
+
+@pytest.mark.parametrize(
+    "body, expected_error",
+    [
+        pytest.param("body is not dict", InvalidAction, id="body is not dict"),
+        pytest.param({"without_type": "move"}, InvalidAction, id="Body without key 'type'"),
+        pytest.param({"type": ""}, InvalidAction, id="Type is empty"),
+        pytest.param({"type": "InvalidType"}, InvalidAction, id="invalid type"),
+    ],
+)
+def test_validate_action_invalid_body_format(test_game, body, expected_error):
+    with pytest.raises(expected_error):
+        validate_action(body, test_game, test_game.white_player)
+
+
+@pytest.mark.parametrize(
+    "body, expected_error",
+    [
+        # type is move
+        pytest.param(
+            {"type": "move", "from_square": "", "to_square": ""},
+            InvalidAction,
+            id="Move type with empty required fields",
+        ),
+        pytest.param({"type": "move"}, InvalidAction, id="Move type without required fields"),
+        pytest.param(
+            {"type": "move", "from_square": "e2", "to_square": "e4", "additional_key": "x"},
+            InvalidAction,
+            id="Move type with additional keys in body",
+        ),
+        # type is chat
+        pytest.param({"type": "chat", "text": ""}, InvalidAction, id="Chat type with empty required field"),
+        pytest.param({"type": "chat"}, InvalidAction, id="Chat type without required field"),
+        pytest.param(
+            {"type": "chat", "text": "test_text", "additional_key": "x"},
+            InvalidAction,
+            id="Chat type with additional keys in body",
+        ),
+        # type is draw_offer
+        pytest.param({"type": "draw_offer"}, DrawOfferAlreadyExists, id="draw offer at the game has already been sent"),
+        pytest.param(
+            {"type": "draw_offer", "additional_key": "x"},
+            InvalidAction,
+            id="draw offer type with additional keys in body",
+        ),
+        # type is draw_accept
+        pytest.param(
+            {"type": "draw_accept", "additional_key": "x"},
+            InvalidAction,
+            id="Draw accept type with additional keys in body",
+        ),
+        pytest.param(
+            {
+                "type": "draw_accept",
+            },
+            DrawOfferNotFound,
+            id="No draw offer was sent field 'draw_offered_by' in game is empty",
+        ),
+        pytest.param({"type": "draw_accept"}, NotOpponentDrawOffer, id="Player tries accept his own draw offer"),
+        # type is draw_reject
+        pytest.param(
+            {"type": "draw_reject", "additional_key": "x"},
+            InvalidAction,
+            id="Draw reject type with additional keys in body",
+        ),
+        pytest.param(
+            {
+                "type": "draw_reject",
+            },
+            DrawOfferNotFound,
+            id="No draw offer was sent field 'draw_offered_by' in game is empty",
+        ),
+        pytest.param({"type": "draw_reject"}, NotOpponentDrawOffer, id="Player tries reject his own draw offer"),
+    ],
+)
+def test_validate_action_invalid_body(test_game, body, expected_error):
+    if body["type"] == "draw_offer":
+        test_game.draw_offered_by = Game.DrawOfferedBy.BLACK
+
+    # White player first send draw_offer so 'draw_offered_by' is 'WHITE' and now tries accepts or rejects his own offer
+    if body["type"] in ("draw_accept", "draw_reject") and expected_error == NotOpponentDrawOffer:
+        test_game.draw_offered_by = Game.DrawOfferedBy.WHITE
+
+    with pytest.raises(expected_error):
+        validate_action(body, test_game, test_game.white_player)
 
 
 def test_get_current_turn_player_white_turn(test_game):

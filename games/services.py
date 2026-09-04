@@ -4,10 +4,19 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from accounts.models import CustomUser
-from games.exceptions import ExceededTimeError, GameDoesNotExist, PlayerDoesNotBelongToGameError
+from games.exceptions import (
+    DrawOfferAlreadyExists,
+    DrawOfferNotFound,
+    ExceededTimeError,
+    GameDoesNotExist,
+    InvalidAction,
+    NotOpponentDrawOffer,
+    PlayerDoesNotBelongToGameError,
+)
 from games.models import Game, Move
 
 
+# Functions use in consumers.py connect
 @database_sync_to_async
 def connect_player_to_game(game_id: int, user: CustomUser):
     """
@@ -39,6 +48,89 @@ def connect_player_to_game(game_id: int, user: CustomUser):
         game.status = Game.Status.IN_PROGRESS
         game.current_turn_started_at = timezone.now()
     game.save()
+
+
+# Functions use in consumers.py receive
+def validate_action(body: dict, game: Game, user: CustomUser) -> dict:
+    """
+    Players can send six types of requests to the server during a game:
+
+    - move: The player wants to make a move. Requires "from_square" and
+      "to_square" fields.
+    - resign: The player wants to resign the game. No additional fields
+      are required.
+    - draw_offer: The player wants to offer a draw to the opponent.
+      The "draw_offered_by" field in the game must be None.
+      No additional fields are required.
+    - draw_accept: The player who received a draw offer accepts it.
+      The "draw_offered_by" field in the game must contain the opponent's
+      color. No additional fields are required.
+    - draw_reject: The player who received a draw offer rejects it.
+      The "draw_offered_by" field in the game must contain the opponent's
+      color. No additional fields are required.
+    - chat: The player wants to send a chat message to the opponent.
+      The "text" field is required.
+
+    Important: This function does not create or changes anything it only valid types and then others
+    functions will manage this types and do rest.
+    """
+
+    # Checks body format
+    if not isinstance(body, dict):
+        raise InvalidAction
+    if "type" not in body:
+        raise InvalidAction
+    if not body["type"]:
+        raise InvalidAction
+
+    action_type = body["type"].lower()
+
+    allowed_type = ["move", "resign", "draw_offer", "draw_accept", "draw_reject", "chat"]
+    if action_type not in allowed_type:
+        raise InvalidAction
+
+    # If type is move fields "from_square" and "to_square" are required
+    if action_type == "move":
+        # budy must contain type, from_square and to_square
+        if len(body) != 3:
+            raise InvalidAction
+        if "from_square" not in body or "to_square" not in body:
+            raise InvalidAction
+        if not body["from_square"] or not body["to_square"]:
+            raise InvalidAction
+
+    if action_type == "chat":
+        # budy must contain type amd text
+        if len(body) != 2:
+            raise InvalidAction
+        if "text" not in body:
+            raise InvalidAction
+        if not body["text"]:
+            raise InvalidAction
+
+    # In this types body must contain only type filed
+    if action_type in ["resign", "draw_offer", "draw_accept", "draw_reject"]:
+        if len(body) != 1:
+            raise InvalidAction
+
+    # Field "draw_offered_by" must be None if the player want offer draw to the opponent
+    if action_type == "draw_offer":
+        if game.draw_offered_by:
+            raise DrawOfferAlreadyExists
+
+    # Checks if filed "draw_offered_by" is user's opponent's color
+    if action_type == "draw_accept" or action_type == "draw_reject":
+        if not game.draw_offered_by:
+            raise DrawOfferNotFound
+        is_white = user == game.white_player
+        if is_white:
+            if game.draw_offered_by == game.DrawOfferedBy.WHITE:
+                raise NotOpponentDrawOffer
+        else:
+            if game.draw_offered_by == game.DrawOfferedBy.BLACK:
+                raise NotOpponentDrawOffer
+
+    return body
 
 
 def get_current_turn_player(game: Game) -> CustomUser:

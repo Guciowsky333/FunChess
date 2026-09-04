@@ -46,6 +46,10 @@ class Game(models.Model):
         IN_PROGRESS = "in_progress", "In Progress"
         FINISHED = "finished", "Finished"
 
+    class DrawOfferedBy(models.TextChoices):
+        WHITE = "white", "White"
+        BLACK = "black", "Black"
+
     result = models.CharField(choices=Result.choices, max_length=9, blank=True, null=True)
 
     status = models.CharField(choices=Status.choices, max_length=11, default=Status.WAITING)
@@ -59,6 +63,8 @@ class Game(models.Model):
     white_time_remaining = models.PositiveIntegerField(null=True, blank=True)
     black_time_remaining = models.PositiveIntegerField(null=True, blank=True)
     current_turn_started_at = models.DateTimeField(null=True, blank=True)
+
+    draw_offered_by = models.CharField(choices=DrawOfferedBy.choices, max_length=5, blank=True, null=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     finished_at = models.DateTimeField(null=True, blank=True)
