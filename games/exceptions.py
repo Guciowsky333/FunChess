@@ -24,3 +24,11 @@ class PlayerDoesNotBelongToGameError(Exception):
 
 class GameDoesNotExist(Exception):
     pass
+
+
+class InvalidMoveFormat(Exception):
+    pass
+
+
+class IllegalChessMove(Exception):
+    pass

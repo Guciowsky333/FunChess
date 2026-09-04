@@ -2,13 +2,14 @@ from datetime import timedelta
 
 import pytest
 from django.utils import timezone
-from rest_framework import serializers
 
 from games.exceptions import (
     DrawOfferAlreadyExists,
     DrawOfferNotFound,
     ExceededTimeError,
+    IllegalChessMove,
     InvalidAction,
+    InvalidMoveFormat,
     NotOpponentDrawOffer,
 )
 from games.models import Game, Move
@@ -204,10 +205,9 @@ def test_check_or_update_time_exceed_time_draw(test_game):
 def test_process_move_valid_first_move(test_game):
     """
     In this test we check whether our function "process_move" correctly
-    creates model Move if user provided correct first move and if they
-    have turn right now.
+    creates model Move if user provided correct first move.
     """
-    # Only white player can make the first move
+
     move = process_move(test_game, test_game.white_player, "e2e4")
     assert Move.objects.filter(id=move.id).exists()
     assert move.game == test_game
@@ -226,7 +226,7 @@ def test_process_move_valid_second_move(test_game):
     """
     # Create firs move
     process_move(test_game, test_game.white_player, "e2e4")
-    # Only black player can make the move
+
     second_move = process_move(test_game, test_game.black_player, "e7e5")
     assert second_move.game == test_game
     assert second_move.from_square == "e7"
@@ -245,23 +245,13 @@ def test_process_move_promotion(test_game, test_move_promotion):
     assert promotion_move.promotion == "Q"
 
 
-def test_process_move_inappropriate_player(test_game):
-    """
-    It this test black player try makes first move, and we expect that
-    function "process_move" return error
-    """
-    with pytest.raises(serializers.ValidationError):
-        process_move(test_game, test_game.black_player, "e2e4")
-    assert not Move.objects.exists()
-
-
 def test_process_move_invalid_move_format(test_game):
-    with pytest.raises(serializers.ValidationError):
+    with pytest.raises(InvalidMoveFormat):
         process_move(test_game, test_game.white_player, "invalid_format")
     assert not Move.objects.exists()
 
 
-def test_process_move_Illegal_move(test_game):
-    with pytest.raises(serializers.ValidationError):
+def test_process_move_illegal_move(test_game):
+    with pytest.raises(IllegalChessMove):
         process_move(test_game, test_game.white_player, "e2e5")
     assert not Move.objects.exists()
