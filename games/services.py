@@ -247,3 +247,57 @@ def process_move(game: Game, user: CustomUser, move_uci: str) -> Move:
     game.save()
 
     return new_move
+
+
+def check_game_end(game: Game, last_move: Move):
+    """
+    Checks if last made move does not finish the game if yes
+    marks the game status as finished and correct game result if not
+    it does nothing.
+    """
+
+    board = chess.Board(last_move.resulting_fen)
+
+    # If the last move results in checkmate, the game ends with a victory for the player who made that move.
+    if board.is_checkmate():
+        is_white = last_move.player == game.white_player
+        game.result = Game.Result.WHITE_WON if is_white else Game.Result.BLACK_WON
+
+    # It the last move results in stalemate the game finished as draw
+    elif board.is_stalemate():
+        game.result = Game.Result.DRAW
+
+    # If both players don't have enough materials to deliver checkmate the game is finished as draw
+    elif board.is_insufficient_material():
+        game.result = Game.Result.DRAW
+
+    # If neither player moves a pawn or makes a capture for 50 full moves, the game ends in a draw.
+    elif board.halfmove_clock >= 100:  # <-- 50 full moves so 100 half moves
+        game.result = Game.Result.DRAW
+
+    # If players made the same chess position 3 times the game is finished as draw
+    elif _has_threefold_repetition(game):
+        game.result = Game.Result.DRAW
+
+    else:
+        return
+
+    game.status = Game.Status.FINISHED
+    game.finished_at = timezone.now()
+    game.save()
+
+
+def _has_threefold_repetition(game: Game) -> bool:
+    """
+    Replays all moves from the game to new board and checks if players
+    don't repeat the same chess position 3 times.
+    """
+    board = chess.Board()
+    all_moves = game.moves.order_by("ply_number")
+    for move in all_moves:
+        move_uci = f"{move.from_square}{move.to_square}"
+        if move.promotion:
+            move_uci += move.promotion.lower()
+        board.push(chess.Move.from_uci(move_uci))
+
+    return board.can_claim_threefold_repetition()

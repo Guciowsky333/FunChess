@@ -13,9 +13,10 @@ from games.exceptions import (
     NotOpponentDrawOffer,
 )
 from games.models import Game, Move
-from games.services import check_or_update_time, get_current_turn_player, process_move, validate_action
+from games.services import check_game_end, check_or_update_time, get_current_turn_player, process_move, validate_action
 
 
+# Tests for 'validate_action' function
 @pytest.mark.parametrize(
     "body",
     [
@@ -126,6 +127,7 @@ def test_validate_action_invalid_body(test_game, body, expected_error):
         validate_action(body, test_game, test_game.white_player)
 
 
+# Tests for 'get_current_turn_player' function
 def test_get_current_turn_player_white_turn(test_game):
     """
     test game has 0 moves so function "get_current_turn" should return
@@ -155,6 +157,7 @@ def test_get_current_turn_player_black_turn(test_game):
     assert player == test_game.black_player
 
 
+# Tests for 'check_or_update_time' function
 def test_check_or_update_time(test_game):
     """
     current_turn_started_at is set 10 seconds in the past, simulating that
@@ -202,6 +205,7 @@ def test_check_or_update_time_exceed_time_draw(test_game):
     assert test_game.result == Game.Result.DRAW
 
 
+# Tests for 'process_move' function
 def test_process_move_valid_first_move(test_game):
     """
     In this test we check whether our function "process_move" correctly
@@ -255,3 +259,138 @@ def test_process_move_illegal_move(test_game):
     with pytest.raises(IllegalChessMove):
         process_move(test_game, test_game.white_player, "e2e5")
     assert not Move.objects.exists()
+
+
+# Tests for 'check_game_end' function
+def test_check_game_end_normal_move(test_game):
+    """
+    In this test we create first move pawn d4 and expected that
+    our function "check_game_end" does nothing with our game because this move
+    does not finish the game
+    """
+    # Sets up status as "IN_PROGRESS" because without connect in consumers.py it would be "WAITING"
+    test_game.status = Game.Status.IN_PROGRESS
+
+    normal_move = process_move(test_game, test_game.white_player, "d2d4")
+    check_game_end(test_game, normal_move)
+    assert test_game.status == Game.Status.IN_PROGRESS
+    # Game is not over
+    assert test_game.result is None
+
+
+def test_check_game_end_checkmate(test_game):
+    """
+    In this test we manually create a move that results to checkmate
+    and see if our functions correctly finish game.
+    """
+    checkmate_move = Move.objects.create(
+        game=test_game,
+        player=test_game.black_player,
+        ply_number=4,
+        from_square="d8",
+        to_square="h4",
+        piece=Move.Piece.QUEEN,
+        resulting_fen="rnb1kbnr/pppp1ppp/8/4p3/6Pq/5P2/PPPPP2P/RNBQKBNR w KQkq - 1 3",
+    )
+    check_game_end(test_game, checkmate_move)
+
+    assert test_game.status == Game.Status.FINISHED
+    # Player who made checkmate move is black so he should win the game
+    assert test_game.result == Game.Result.BLACK_WON
+    assert test_game.finished_at is not None
+
+
+def test_check_game_end_stalemate(test_game):
+    """
+    In this test we manually create a move that result to stalemate
+    and see if our functions correctly finish game.
+    """
+    stalemate_move = Move.objects.create(
+        game=test_game,
+        player=test_game.white_player,
+        ply_number=1,
+        from_square="b5",
+        to_square="b6",
+        piece=Move.Piece.QUEEN,
+        resulting_fen="k7/8/1Q6/8/8/8/8/7K b - - 0 1",
+    )
+    check_game_end(test_game, stalemate_move)
+    assert test_game.status == Game.Status.FINISHED
+    assert test_game.result == Game.Result.DRAW
+    assert test_game.finished_at is not None
+
+
+def test_check_game_end_insufficient_material(test_game):
+    """
+    In this test both players has insufficient material to deliver checkmate
+    so game should be finished as draw.
+    """
+    last_move = Move.objects.create(
+        game=test_game,
+        player=test_game.white_player,
+        ply_number=1,
+        from_square="f4",
+        to_square="c1",
+        piece=Move.Piece.BISHOP,
+        resulting_fen="4k3/8/8/8/8/8/8/2B1K3 w - - 0 1",
+    )
+    check_game_end(test_game, last_move)
+    assert test_game.status == Game.Status.FINISHED
+    assert test_game.result == Game.Result.DRAW
+    assert test_game.finished_at is not None
+
+
+def test_check_game_end_fifty_move_rule(test_game):
+    """
+    The game in this test has 50 full moves without moving pawn or makes a capture
+    so the game should be finished as draw.
+    """
+    last_move = Move.objects.create(
+        game=test_game,
+        player=test_game.white_player,
+        ply_number=1,
+        from_square="e1",
+        to_square="e1",  # nieistotne dla tego testu, byle FEN był poprawny
+        piece=Move.Piece.KING,
+        resulting_fen="4k3/8/8/8/8/8/8/R3K3 w - - 100 60",
+    )
+    check_game_end(test_game, last_move)
+    assert test_game.status == Game.Status.FINISHED
+    assert test_game.result == Game.Result.DRAW
+    assert test_game.finished_at is not None
+
+
+def test_check_game_end_has_threefold_repetition(test_game):
+    """
+    In this test we use "process_move" function to genere first 6 moves and repeat
+    the position 3 times and that should result in the game finished as draw.
+    """
+    moves_uci = [
+        # The first full move
+        "b1a3",
+        "b8c6",  # <- both players move knights
+        "a3b1",
+        "c6b8",  # <- back into initial position
+        # The second full move
+        "b1a3",
+        "b8c6",  # <- again the same moves
+        "a3b1",
+        "c6b8",
+        # The third full move
+        "b1a3",
+        "b8c6",  # <- third time the same moves
+        "a3b1",
+        "c6b8",
+    ]
+    for ply_number, move in enumerate(moves_uci, start=1):
+        if ply_number % 2 == 1:
+            player = test_game.white_player
+        else:
+            player = test_game.black_player
+        process_move(test_game, player, move)
+    last_move = test_game.moves.order_by("ply_number").first()
+
+    check_game_end(test_game, last_move)
+    assert test_game.status == Game.Status.FINISHED
+    assert test_game.result == Game.Result.DRAW
+    assert test_game.finished_at is not None
