@@ -28,6 +28,18 @@ def test_game(test_user_1, test_user_2, test_time_control_10_minutes):
         time_control=test_time_control_10_minutes,
         white_time_remaining=600,
         black_time_remaining=600,
+        status=Game.Status.IN_PROGRESS,
+    )
+
+
+@pytest.fixture
+def test_game_status_waiting(test_user_1, test_user_2, test_time_control_10_minutes):
+    return Game.objects.create(
+        white_player=test_user_1,
+        black_player=test_user_2,
+        time_control=test_time_control_10_minutes,
+        white_time_remaining=600,
+        black_time_remaining=600,
     )
 
 

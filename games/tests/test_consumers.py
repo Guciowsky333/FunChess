@@ -8,40 +8,40 @@ from games.models import Game
 
 @pytest.mark.asyncio
 @pytest.mark.django_db(transaction=True)
-async def test_connect_as_white_player(test_game):
+async def test_connect_as_white_player(test_game_status_waiting):
     communicator = WebsocketCommunicator(
         application,
-        f"/ws/games/{test_game.id}/",
+        f"/ws/games/{test_game_status_waiting.id}/",
     )
-    communicator.scope["user"] = test_game.white_player
+    communicator.scope["user"] = test_game_status_waiting.white_player
     connected, subprotocol = await communicator.connect()
     assert connected
-    await database_sync_to_async(test_game.refresh_from_db)()
-    assert test_game.white_connected
+    await database_sync_to_async(test_game_status_waiting.refresh_from_db)()
+    assert test_game_status_waiting.white_connected
     await communicator.disconnect()
 
 
 @pytest.mark.asyncio
 @pytest.mark.django_db(transaction=True)
-async def test_connect_as_black_player(test_game):
+async def test_connect_as_black_player(test_game_status_waiting):
     communicator = WebsocketCommunicator(
         application,
-        f"/ws/games/{test_game.id}/",
+        f"/ws/games/{test_game_status_waiting.id}/",
     )
-    communicator.scope["user"] = test_game.black_player
+    communicator.scope["user"] = test_game_status_waiting.black_player
     connected, subprotocol = await communicator.connect()
     assert connected
-    await database_sync_to_async(test_game.refresh_from_db)()
-    assert test_game.black_connected
+    await database_sync_to_async(test_game_status_waiting.refresh_from_db)()
+    assert test_game_status_waiting.black_connected
     await communicator.disconnect()
 
 
 @pytest.mark.asyncio
 @pytest.mark.django_db(transaction=True)
-async def test_connect_as_user_not_belongs_to_game(test_game, test_user_not_belongs_to_game):
+async def test_connect_as_user_not_belongs_to_game(test_game_status_waiting, test_user_not_belongs_to_game):
     communicator = WebsocketCommunicator(
         application,
-        f"/ws/games/{test_game.id}/",
+        f"/ws/games/{test_game_status_waiting.id}/",
     )
     communicator.scope["user"] = test_user_not_belongs_to_game
     connected, subprotocol = await communicator.connect()
@@ -69,22 +69,22 @@ async def test_connect_user_provided_not_exist_game(test_user_1):
 
 @pytest.mark.asyncio
 @pytest.mark.django_db(transaction=True)
-async def test_connect_both_players(test_game):
+async def test_connect_both_players(test_game_status_waiting):
     """
     In this test we change filed "white_connected" manually in provided game
     and expect that when black player will connect status and current_turn_started_at
     will change at provided game
     """
-    test_game.white_connected = True
-    await database_sync_to_async(test_game.save)()
+    test_game_status_waiting.white_connected = True
+    await database_sync_to_async(test_game_status_waiting.save)()
     communicator = WebsocketCommunicator(
         application,
-        f"/ws/games/{test_game.id}/",
+        f"/ws/games/{test_game_status_waiting.id}/",
     )
-    communicator.scope["user"] = test_game.black_player
+    communicator.scope["user"] = test_game_status_waiting.black_player
     connected, subprotocol = await communicator.connect()
     assert connected
-    await database_sync_to_async(test_game.refresh_from_db)()
-    assert test_game.black_connected
-    assert test_game.status == Game.Status.IN_PROGRESS
-    assert test_game.current_turn_started_at is not None
+    await database_sync_to_async(test_game_status_waiting.refresh_from_db)()
+    assert test_game_status_waiting.black_connected
+    assert test_game_status_waiting.status == Game.Status.IN_PROGRESS
+    assert test_game_status_waiting.current_turn_started_at is not None

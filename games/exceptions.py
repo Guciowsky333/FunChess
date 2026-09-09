@@ -32,3 +32,7 @@ class InvalidMoveFormat(Exception):
 
 class IllegalChessMove(Exception):
     pass
+
+
+class TheGameIsFinish(Exception):
+    pass
