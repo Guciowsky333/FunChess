@@ -136,6 +136,19 @@ def validate_action(body: dict, game: Game, user: CustomUser) -> dict:
     return body
 
 
+def surrender_the_game(game: Game, user: CustomUser):
+    """
+    Finish the game, player who sent body with "resign" type lost it.
+    """
+    game.status = Game.Status.FINISHED
+    game.finished_at = timezone.now()
+    # checks player's color
+    is_white = user == game.white_player
+    # Player's opponent win the game
+    game.result = Game.Result.BLACK_WON if is_white else Game.Result.WHITE_WON
+    game.save()
+
+
 def get_current_turn_player(game: Game) -> CustomUser:
     """
     Return user that currently has a turn.

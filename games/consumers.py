@@ -20,6 +20,7 @@ from games.services import (
     connect_player_to_game,
     get_current_turn_player,
     process_move,
+    surrender_the_game,
     validate_action,
 )
 from games.tasks import check_opponent_time
@@ -77,10 +78,17 @@ class GamesConsumer(AsyncWebsocketConsumer):
                 text_data=json.dumps({"error": "Your opponent didn't send draw offer,you can't accept your own offer"})
             )
             return
+        # Taking player who has already turn
+        current_player = await database_sync_to_async(get_current_turn_player)(game)
+        if body["type"] == "resign":
+            await database_sync_to_async(surrender_the_game)(game, current_player)
+            await self.channel_layer.group_send(
+                f"game_{self.game_id}",
+                {"type": "game_ended", "content": {"result": game.result, "reason": "surrender"}},
+            )
+            return
 
         if body["type"] == "move":
-            # Taking player who has already
-            current_player = await database_sync_to_async(get_current_turn_player)(game)
             if current_player != user:
                 await self.send(text_data=json.dumps({"error": "Now is not your turn"}))
                 return

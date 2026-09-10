@@ -13,7 +13,14 @@ from games.exceptions import (
     NotOpponentDrawOffer,
 )
 from games.models import Game, Move
-from games.services import check_game_end, check_or_update_time, get_current_turn_player, process_move, validate_action
+from games.services import (
+    check_game_end,
+    check_or_update_time,
+    get_current_turn_player,
+    process_move,
+    surrender_the_game,
+    validate_action,
+)
 
 
 # Tests for 'validate_action' function
@@ -129,6 +136,23 @@ def test_validate_action_invalid_body(test_game, body, expected_error):
 
     with pytest.raises(expected_error):
         validate_action(body, test_game, test_game.white_player)
+
+
+# Tests for 'surrender_the_game' function
+def test_surrender_the_game_white_gave_up(test_game):
+    surrender_the_game(test_game, test_game.white_player)
+    assert test_game.status == Game.Status.FINISHED
+    # Black should win because white conceding the game
+    assert test_game.result == Game.Result.BLACK_WON
+    assert test_game.finished_at is not None
+
+
+def test_surrender_the_game_black_gave_up(test_game):
+    surrender_the_game(test_game, test_game.black_player)
+    assert test_game.status == Game.Status.FINISHED
+    # White should win because black conceding the game
+    assert test_game.result == Game.Result.WHITE_WON
+    assert test_game.finished_at is not None
 
 
 # Tests for 'get_current_turn_player' function
