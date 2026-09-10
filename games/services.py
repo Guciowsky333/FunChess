@@ -149,6 +149,15 @@ def surrender_the_game(game: Game, user: CustomUser):
     game.save()
 
 
+def draw_offer(game: Game, user: CustomUser):
+    """
+    Sets up filed "draw_offered_by" in the game as player's color who sent body with "draw_offer" type.
+    """
+    is_white = user == game.white_player
+    game.draw_offered_by = game.DrawOfferedBy.WHITE if is_white else game.DrawOfferedBy.BLACK
+    game.save()
+
+
 def get_current_turn_player(game: Game) -> CustomUser:
     """
     Return user that currently has a turn.

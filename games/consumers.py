@@ -18,6 +18,7 @@ from games.services import (
     check_game_end,
     check_or_update_time,
     connect_player_to_game,
+    draw_offer,
     get_current_turn_player,
     process_move,
     surrender_the_game,
@@ -88,6 +89,14 @@ class GamesConsumer(AsyncWebsocketConsumer):
             )
             return
 
+        if body["type"] == "draw_offer":
+            await database_sync_to_async(draw_offer)(game, current_player)
+            await self.channel_layer.group_send(
+                f"game_{self.game_id}",
+                {"type": "draw_offered", "content": {"offered_by": self.scope["user"].id, "type": "draw_offered"}},
+            )
+            return
+
         if body["type"] == "move":
             if current_player != user:
                 await self.send(text_data=json.dumps({"error": "Now is not your turn"}))
@@ -144,3 +153,9 @@ class GamesConsumer(AsyncWebsocketConsumer):
     async def game_ended(self, event):
         await self.send(text_data=json.dumps(event["content"]))
         await self.close()
+
+    async def draw_offered(self, event):
+        offered_by_id = event["content"]["offered_by"]
+        if self.scope["user"].id == offered_by_id:
+            return
+        await self.send(text_data=json.dumps(event["content"]))

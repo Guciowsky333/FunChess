@@ -16,6 +16,7 @@ from games.models import Game, Move
 from games.services import (
     check_game_end,
     check_or_update_time,
+    draw_offer,
     get_current_turn_player,
     process_move,
     surrender_the_game,
@@ -153,6 +154,17 @@ def test_surrender_the_game_black_gave_up(test_game):
     # White should win because black conceding the game
     assert test_game.result == Game.Result.WHITE_WON
     assert test_game.finished_at is not None
+
+
+# Tests for 'draw_offer' function
+def test_draw_offer_white_snet_offer(test_game):
+    draw_offer(test_game, test_game.white_player)
+    assert test_game.draw_offered_by == Game.DrawOfferedBy.WHITE
+
+
+def test_draw_offer_black_snet_offer(test_game):
+    draw_offer(test_game, test_game.black_player)
+    assert test_game.draw_offered_by == Game.DrawOfferedBy.BLACK
 
 
 # Tests for 'get_current_turn_player' function
