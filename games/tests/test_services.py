@@ -18,6 +18,7 @@ from games.services import (
     check_or_update_time,
     draw_accept,
     draw_offer,
+    draw_reject,
     get_current_turn_player,
     process_move,
     surrender_the_game,
@@ -168,12 +169,19 @@ def test_draw_offer_black_snet_offer(test_game):
     assert test_game.draw_offered_by == Game.DrawOfferedBy.BLACK
 
 
-# Tests for 'draw_accept' function
+# Test for 'draw_accept' function
 def test_draw_accept(test_game):
     draw_accept(test_game)
     assert test_game.status == Game.Status.FINISHED
     assert test_game.result == Game.Result.DRAW
     assert test_game.finished_at is not None
+
+
+# Test for 'draw_reject' function
+def test_draw_reject(test_game):
+    test_game.draw_offered_by = Game.DrawOfferedBy.BLACK
+    draw_reject(test_game)
+    assert test_game.draw_offered_by is None
 
 
 # Tests for 'get_current_turn_player' function

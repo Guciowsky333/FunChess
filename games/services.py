@@ -170,6 +170,16 @@ def draw_accept(game: Game) -> None:
     game.save()
 
 
+def draw_reject(game: Game) -> None:
+    """
+    Sets up filed "draw_offered_by" again as "None". Assumes that rejecting
+    player and if he is able to reject the draw offer have already been validated.
+    in validate_action.
+    """
+    game.draw_offered_by = None
+    game.save()
+
+
 def get_current_turn_player(game: Game) -> CustomUser:
     """
     Return user that currently has a turn.

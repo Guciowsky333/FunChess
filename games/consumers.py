@@ -20,6 +20,7 @@ from games.services import (
     connect_player_to_game,
     draw_accept,
     draw_offer,
+    draw_reject,
     get_current_turn_player,
     process_move,
     surrender_the_game,
@@ -80,6 +81,7 @@ class GamesConsumer(AsyncWebsocketConsumer):
                 text_data=json.dumps({"error": "Your opponent didn't send draw offer,you can't accept your own offer"})
             )
             return
+
         # Taking player who has already turn
         current_player = await database_sync_to_async(get_current_turn_player)(game)
         if body["type"] == "resign":
@@ -90,18 +92,42 @@ class GamesConsumer(AsyncWebsocketConsumer):
             )
             return
 
+        # Sending draw offer to the opponent
         if body["type"] == "draw_offer":
             await database_sync_to_async(draw_offer)(game, current_player)
             await self.channel_layer.group_send(
                 f"game_{self.game_id}",
-                {"type": "draw_offered", "content": {"offered_by": self.scope["user"].id, "type": "draw_offered"}},
+                {"type": "notify_opponent", "content": {"player_id": self.scope["user"].id, "type": "draw_offered"}},
             )
             return
+
+        # Rejecting draw offer
+        if body["type"] == "draw_reject":
+            await database_sync_to_async(draw_reject)(game)
+            await self.channel_layer.group_send(
+                f"game_{self.game_id}",
+                {
+                    "type": "notify_opponent",
+                    "content": {"player_id": self.scope["user"].id, "type": "draw_offer_rejected"},
+                },
+            )
+            return
+
+        # Accepting draw offer the game is finished as draw
         if body["type"] == "draw_accept":
             await database_sync_to_async(draw_accept)(game)
             await self.channel_layer.group_send(
                 f"game_{self.game_id}",
                 {"type": "game_ended", "content": {"result": game.result, "reason": "draw_accepted"}},
+            )
+            return
+
+        # Sends message to all players
+        if body["type"] == "chat":
+            message = body["text"]
+            await self.channel_layer.group_send(
+                f"game_{self.game_id}",
+                {"type": "send_message", "content": {"player_id": user.id, "message": message}},
             )
             return
 
@@ -158,12 +184,15 @@ class GamesConsumer(AsyncWebsocketConsumer):
                 countdown=opponent_time_remaining,
             )
 
+    async def send_message(self, event):
+        await self.send(text_data=json.dumps(event["content"]))
+
     async def game_ended(self, event):
         await self.send(text_data=json.dumps(event["content"]))
         await self.close()
 
-    async def draw_offered(self, event):
-        offered_by_id = event["content"]["offered_by"]
-        if self.scope["user"].id == offered_by_id:
+    async def notify_opponent(self, event):
+        player_id = event["content"]["player_id"]
+        if self.scope["user"].id == player_id:
             return
         await self.send(text_data=json.dumps(event["content"]))
