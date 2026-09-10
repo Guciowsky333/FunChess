@@ -136,7 +136,7 @@ def validate_action(body: dict, game: Game, user: CustomUser) -> dict:
     return body
 
 
-def surrender_the_game(game: Game, user: CustomUser):
+def surrender_the_game(game: Game, user: CustomUser) -> None:
     """
     Finish the game, player who sent body with "resign" type lost it.
     """
@@ -149,12 +149,24 @@ def surrender_the_game(game: Game, user: CustomUser):
     game.save()
 
 
-def draw_offer(game: Game, user: CustomUser):
+def draw_offer(game: Game, user: CustomUser) -> None:
     """
     Sets up filed "draw_offered_by" in the game as player's color who sent body with "draw_offer" type.
     """
     is_white = user == game.white_player
     game.draw_offered_by = game.DrawOfferedBy.WHITE if is_white else game.DrawOfferedBy.BLACK
+    game.save()
+
+
+def draw_accept(game: Game) -> None:
+    """
+    Finishes the game as draw. Assumes the accepting player and the
+    existence of a pending draw offer have already been validated
+    in validate_action.
+    """
+    game.status = Game.Status.FINISHED
+    game.result = Game.Result.DRAW
+    game.finished_at = timezone.now()
     game.save()
 
 

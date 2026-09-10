@@ -18,6 +18,7 @@ from games.services import (
     check_game_end,
     check_or_update_time,
     connect_player_to_game,
+    draw_accept,
     draw_offer,
     get_current_turn_player,
     process_move,
@@ -94,6 +95,13 @@ class GamesConsumer(AsyncWebsocketConsumer):
             await self.channel_layer.group_send(
                 f"game_{self.game_id}",
                 {"type": "draw_offered", "content": {"offered_by": self.scope["user"].id, "type": "draw_offered"}},
+            )
+            return
+        if body["type"] == "draw_accept":
+            await database_sync_to_async(draw_accept)(game)
+            await self.channel_layer.group_send(
+                f"game_{self.game_id}",
+                {"type": "game_ended", "content": {"result": game.result, "reason": "draw_accepted"}},
             )
             return
 

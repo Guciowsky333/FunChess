@@ -16,6 +16,7 @@ from games.models import Game, Move
 from games.services import (
     check_game_end,
     check_or_update_time,
+    draw_accept,
     draw_offer,
     get_current_turn_player,
     process_move,
@@ -165,6 +166,14 @@ def test_draw_offer_white_snet_offer(test_game):
 def test_draw_offer_black_snet_offer(test_game):
     draw_offer(test_game, test_game.black_player)
     assert test_game.draw_offered_by == Game.DrawOfferedBy.BLACK
+
+
+# Tests for 'draw_accept' function
+def test_draw_accept(test_game):
+    draw_accept(test_game)
+    assert test_game.status == Game.Status.FINISHED
+    assert test_game.result == Game.Result.DRAW
+    assert test_game.finished_at is not None
 
 
 # Tests for 'get_current_turn_player' function
