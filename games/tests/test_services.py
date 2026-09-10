@@ -21,6 +21,10 @@ from games.services import check_game_end, check_or_update_time, get_current_tur
     "body",
     [
         pytest.param({"type": "move", "from_square": "e2", "to_square": "e4"}, id="Move type"),
+        pytest.param(
+            {"type": "move", "from_square": "e2", "to_square": "e4", "promotion": "q"},
+            id="Move type with correct promotion Q-Queen",
+        ),
         pytest.param({"type": "chat", "text": "test text"}, id="Chat type"),
         pytest.param({"type": "resign"}, id="resign type"),
         pytest.param({"type": "draw_offer"}, id="draw_offer type"),
@@ -66,9 +70,9 @@ def test_validate_action_invalid_body_format(test_game, body, expected_error):
         ),
         pytest.param({"type": "move"}, InvalidAction, id="Move type without required fields"),
         pytest.param(
-            {"type": "move", "from_square": "e2", "to_square": "e4", "additional_key": "x"},
+            {"type": "move", "from_square": "d2", "to_square": "d4", "promotion": "X"},
             InvalidAction,
-            id="Move type with additional keys in body",
+            id="Move type with invalid promotion",
         ),
         # type is chat
         pytest.param({"type": "chat", "text": ""}, InvalidAction, id="Chat type with empty required field"),

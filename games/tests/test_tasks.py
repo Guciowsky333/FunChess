@@ -1,6 +1,3 @@
-import pytest
-
-from games.exceptions import TheGameIsFinish
 from games.models import Game, Move
 from games.services import process_move
 from games.tasks import check_opponent_time
@@ -93,11 +90,12 @@ def test_check_opponent_time_has_insufficiently_material(test_game):
 
 def test_check_opponent_time_game_status_is_not_in_progress(test_game):
     """
-    If game status is other than "IN_PROGRESS" our task should raise
-    "TheGameIsFinish" exception.
+    If game status is other than "IN_PROGRESS" our task should not do anything
+    with the game.
+
     """
     process_move(test_game, test_game.white_player, "d2d4")
     test_game.status = Game.Status.FINISHED
-    test_game.refresh_from_db()
-    with pytest.raises(TheGameIsFinish):
-        check_opponent_time(test_game.id, 1)
+    check_opponent_time(test_game.id, 1)
+    # test_game status should be unchanged "FINISHED"
+    assert test_game.status == Game.Status.FINISHED

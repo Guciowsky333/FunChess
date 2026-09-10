@@ -91,13 +91,16 @@ def validate_action(body: dict, game: Game, user: CustomUser) -> dict:
 
     # If type is move fields "from_square" and "to_square" are required
     if action_type == "move":
-        # budy must contain type, from_square and to_square
-        if len(body) != 3:
-            raise InvalidAction
         if "from_square" not in body or "to_square" not in body:
             raise InvalidAction
         if not body["from_square"] or not body["to_square"]:
             raise InvalidAction
+
+        # Type move also enable plyer to make promotion allowed (N-Knight, B-Bishop, R-Rook, Q-Queen)
+        # Field promotion is not required
+        if "promotion" in body:
+            if body["promotion"].upper() not in ("N", "B", "R", "Q"):
+                raise InvalidAction
 
     if action_type == "chat":
         # budy must contain type amd text
