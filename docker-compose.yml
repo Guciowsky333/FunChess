@@ -11,6 +11,7 @@ services:
       sh -c "
       uv run python manage.py migrate &&
       uv run daphne -b 0.0.0.0 -p 8000 config.asgi:application"
+      uv run daphne -b 0.0.0.0 -p 8000 --ping-interval 300 --ping-timeout 300 config.asgi:application
     ports:
       - "8000:8000"
     volumes:

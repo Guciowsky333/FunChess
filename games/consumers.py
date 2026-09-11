@@ -41,18 +41,27 @@ def save_game(game):
 
 class GamesConsumer(AsyncWebsocketConsumer):
     async def connect(self):
+
         self.game_id = self.scope["url_route"]["kwargs"]["game_id"]
         self.game_group_name = f"game_{self.game_id}"
         user = self.scope["user"]
+
         try:
             await connect_player_to_game(self.game_id, user)
-            await self.channel_layer.group_add(self.game_group_name, self.channel_name)
+
+            await self.channel_layer.group_add(
+                self.game_group_name,
+                self.channel_name,
+            )
+
             await self.accept()
+
         except GameDoesNotExist:
             await self.accept()
             await self.send(text_data=json.dumps({"error": "Game not found"}))
             await self.close()
             return
+
         except PlayerDoesNotBelongToGameError:
             await self.accept()
             await self.send(text_data=json.dumps({"error": "You do not belong to this game"}))

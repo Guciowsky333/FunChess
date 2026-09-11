@@ -34,6 +34,10 @@ class TimeControl(models.Model):
     initial_time_seconds = models.PositiveIntegerField()
     increment_seconds = models.PositiveIntegerField(default=0)
 
+    def __str__(self):
+        minutes = self.initial_time_seconds // 60
+        return f"{minutes}+{self.increment_seconds}"
+
 
 class Game(models.Model):
     class Result(models.TextChoices):
