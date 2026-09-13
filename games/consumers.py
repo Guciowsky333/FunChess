@@ -195,14 +195,29 @@ class GamesConsumer(AsyncWebsocketConsumer):
 
             # If everything is correct and last move didn't finish the game we start count opponent's time
             ply_number = last_move.ply_number
-            # If White made the last move, we take Black's remaining time, and vice versa.
             is_white = current_player == game.white_player
             opponent_time_remaining = game.black_time_remaining if is_white else game.white_time_remaining
             # We run our task to prevent case when opponent does not make a move at all
-            # The task will finish tha game after opponent's remaining time if they didn't make move
+            # The task will finish tha game and sends a message to both players after opponent's remaining time if they didn't make move
             check_opponent_time.apply_async(
                 args=[self.game_id, ply_number],
                 countdown=opponent_time_remaining,
+            )
+
+            # Sending info about last move to both players
+            await self.channel_layer.group_send(
+                f"game_{self.game_id}",
+                {
+                    "type": "send_message",
+                    "content": {
+                        "white_time_remaining": game.white_time_remaining,
+                        "player_id": current_player.id,
+                        "black_time_remaining": game.black_time_remaining,
+                        "last_move_from_square": last_move.from_square,
+                        "last_move_to_square": last_move.to_square,
+                        "last_move_resulting_fen": last_move.resulting_fen,
+                    },
+                },
             )
 
     async def send_message(self, event):
