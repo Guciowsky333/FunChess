@@ -13,6 +13,7 @@ from games.exceptions import (
     InvalidMoveFormat,
     NotOpponentDrawOffer,
     PlayerDoesNotBelongToGameError,
+    TheGameIsFinish,
 )
 from games.models import Game, Move
 
@@ -35,6 +36,8 @@ def connect_player_to_game(game_id: int, user: CustomUser):
     except Game.DoesNotExist:
         raise GameDoesNotExist
 
+    if game.status == Game.Status.FINISHED:
+        raise TheGameIsFinish
     if game.white_player == user:
         game.white_connected = True
 

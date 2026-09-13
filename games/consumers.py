@@ -12,6 +12,7 @@ from games.exceptions import (
     InvalidMoveFormat,
     NotOpponentDrawOffer,
     PlayerDoesNotBelongToGameError,
+    TheGameIsFinish,
 )
 from games.models import Game
 from games.services import (
@@ -55,6 +56,12 @@ class GamesConsumer(AsyncWebsocketConsumer):
             )
 
             await self.accept()
+
+        except TheGameIsFinish:
+            await self.accept()
+            await self.send(text_data=json.dumps({"error": "The game is already finished"}))
+            await self.close()
+            return
 
         except GameDoesNotExist:
             await self.accept()
