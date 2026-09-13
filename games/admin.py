@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from games.models import Game, TimeControl
+from games.models import Game, Move, TimeControl
 
 
 @admin.register(TimeControl)
@@ -14,3 +14,11 @@ class GameAdmin(admin.ModelAdmin):
 
     def time_control_category(self, obj):
         return obj.time_control.category
+
+
+@admin.register(Move)
+class MoveAdmin(admin.ModelAdmin):
+    list_display = ["id", "game", "player_name", "ply_number", "from_square", "to_square", "piece"]
+
+    def player_name(self, obj):
+        return obj.player.username

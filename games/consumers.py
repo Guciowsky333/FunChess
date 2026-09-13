@@ -72,7 +72,12 @@ class GamesConsumer(AsyncWebsocketConsumer):
         await self.channel_layer.group_discard(self.game_group_name, self.channel_name)
 
     async def receive(self, text_data):
-        data = json.loads(text_data)
+
+        try:
+            data = json.loads(text_data)
+        except json.JSONDecodeError:
+            await self.send(text_data=json.dumps({"error": "Invalid body type"}))
+            return
         game = await get_game(self.game_id)
         user = self.scope["user"]
 
