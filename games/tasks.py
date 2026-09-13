@@ -1,5 +1,7 @@
 import chess
+from asgiref.sync import async_to_sync
 from celery import shared_task
+from channels.layers import get_channel_layer
 from django.utils import timezone
 
 from games.models import Game
@@ -34,7 +36,7 @@ def check_opponent_time(game_id: int, ply_number: int):
         if board.has_insufficient_material(chess.WHITE if number_of_moves % 2 == 1 else chess.BLACK):
             game.result = Game.Result.DRAW
 
-        # If the player who has still time has enough he is winning the game
+        # If the player who has still time has enough material to deliver checkmate he is winning the game
         else:
             if number_of_moves % 2 == 1:
                 game.result = Game.Result.WHITE_WON
@@ -44,6 +46,13 @@ def check_opponent_time(game_id: int, ply_number: int):
         game.status = Game.Status.FINISHED
         game.finished_at = timezone.now()
         game.save()
+        channel_layer = get_channel_layer()
+
+        # Sending message to both player that the game is over
+        async_to_sync(channel_layer.group_send)(
+            f"game_{game_id}",
+            {"type": "game_ended", "content": {"result": game.result, "reason": "timeout"}},
+        )
 
     # If number of moves has been changed task does not change anything in the game
     else:
