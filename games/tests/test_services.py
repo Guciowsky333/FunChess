@@ -219,11 +219,17 @@ def test_check_or_update_time(test_game):
     """
     current_turn_started_at is set 10 seconds in the past, simulating that
     the given user spent 10 seconds making a move.
-    Initial time is 600s, increment is 5s, so expected remaining is 600 - 10 + 5.
+    Initial time is 600s, so expected remaining is 600 - 10.
+
+    Important: Adding increment only when player make a move in function "process_move"
     """
     test_game.current_turn_started_at = timezone.now() - timedelta(seconds=10)
     check_or_update_time(test_game, test_game.white_player)
-    assert test_game.white_time_remaining == 600 - 10 + 5
+    assert test_game.white_time_remaining == 600 - 10
+
+    # Only after making a move, the player should receive a time increment.
+    process_move(test_game, test_game.white_player, "e2e4")
+    assert test_game.white_time_remaining == 590 + test_game.time_control.increment_seconds
 
 
 def test_check_or_update_time_exceed_time(test_game):
@@ -263,6 +269,8 @@ def test_check_or_update_time_exceed_time_draw(test_game):
 
 
 # Tests for 'process_move' function
+
+
 def test_process_move_valid_first_move(test_game):
     """
     In this test we check whether our function "process_move" correctly
