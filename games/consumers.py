@@ -6,6 +6,7 @@ from channels.generic.websocket import AsyncWebsocketConsumer
 
 from games.exceptions import (
     DrawOfferAlreadyExists,
+    DrawOfferNotFound,
     ExceededTimeError,
     GameDoesNotExist,
     IllegalChessMove,
@@ -102,6 +103,13 @@ class GamesConsumer(AsyncWebsocketConsumer):
         except NotOpponentDrawOffer:
             await self.send(
                 text_data=json.dumps({"error": "Your opponent didn't send draw offer,you can't accept your own offer"})
+            )
+            return
+        except DrawOfferNotFound:
+            await self.send(
+                text_data=json.dumps(
+                    {"error": "Your opponent didn't send draw offer, you can't accept not existing offer"}
+                )
             )
             return
 
