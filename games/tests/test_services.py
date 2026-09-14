@@ -329,7 +329,8 @@ def test_check_game_end_normal_move(test_game):
     test_game.status = Game.Status.IN_PROGRESS
 
     normal_move = process_move(test_game, test_game.white_player, "d2d4")
-    check_game_end(test_game, normal_move)
+    reason = check_game_end(test_game, normal_move)
+    assert reason is None
     assert test_game.status == Game.Status.IN_PROGRESS
     # Game is not over
     assert test_game.result is None
@@ -349,7 +350,8 @@ def test_check_game_end_checkmate(test_game):
         piece=Move.Piece.QUEEN,
         resulting_fen="rnb1kbnr/pppp1ppp/8/4p3/6Pq/5P2/PPPPP2P/RNBQKBNR w KQkq - 1 3",
     )
-    check_game_end(test_game, checkmate_move)
+    reason = check_game_end(test_game, checkmate_move)
+    assert reason == "checkmate"
 
     assert test_game.status == Game.Status.FINISHED
     # Player who made checkmate move is black so he should win the game
@@ -371,7 +373,8 @@ def test_check_game_end_stalemate(test_game):
         piece=Move.Piece.QUEEN,
         resulting_fen="k7/8/1Q6/8/8/8/8/7K b - - 0 1",
     )
-    check_game_end(test_game, stalemate_move)
+    reason = check_game_end(test_game, stalemate_move)
+    assert reason == "stalemate"
     assert test_game.status == Game.Status.FINISHED
     assert test_game.result == Game.Result.DRAW
     assert test_game.finished_at is not None
@@ -391,7 +394,8 @@ def test_check_game_end_insufficient_material(test_game):
         piece=Move.Piece.BISHOP,
         resulting_fen="4k3/8/8/8/8/8/8/2B1K3 w - - 0 1",
     )
-    check_game_end(test_game, last_move)
+    reason = check_game_end(test_game, last_move)
+    assert reason == "insufficient_material"
     assert test_game.status == Game.Status.FINISHED
     assert test_game.result == Game.Result.DRAW
     assert test_game.finished_at is not None
@@ -411,7 +415,8 @@ def test_check_game_end_fifty_move_rule(test_game):
         piece=Move.Piece.KING,
         resulting_fen="4k3/8/8/8/8/8/8/R3K3 w - - 100 60",
     )
-    check_game_end(test_game, last_move)
+    reason = check_game_end(test_game, last_move)
+    assert reason == "fifty_move_rule"
     assert test_game.status == Game.Status.FINISHED
     assert test_game.result == Game.Result.DRAW
     assert test_game.finished_at is not None
@@ -447,7 +452,8 @@ def test_check_game_end_has_threefold_repetition(test_game):
         process_move(test_game, player, move)
     last_move = test_game.moves.order_by("ply_number").first()
 
-    check_game_end(test_game, last_move)
+    reason = check_game_end(test_game, last_move)
+    assert reason == "threefold_repetition_position"
     assert test_game.status == Game.Status.FINISHED
     assert test_game.result == Game.Result.DRAW
     assert test_game.finished_at is not None

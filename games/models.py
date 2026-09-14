@@ -54,6 +54,9 @@ class Game(models.Model):
         WHITE = "white", "White"
         BLACK = "black", "Black"
 
+    # id of last called task 'check_opponent_time' during the game
+    pending_timeout_task_id = models.CharField(max_length=36, null=True, blank=True)
+
     result = models.CharField(choices=Result.choices, max_length=9, blank=True, null=True)
 
     status = models.CharField(choices=Status.choices, max_length=11, default=Status.WAITING)

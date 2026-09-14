@@ -13,9 +13,10 @@ from games.exceptions import (
     InvalidMoveFormat,
     NotOpponentDrawOffer,
     PlayerDoesNotBelongToGameError,
-    TheGameIsFinish,
+    TheGameIsFinished,
 )
 from games.models import Game, Move
+from games.tasks import check_opponent_time
 
 
 # Functions use in consumers.py connect
@@ -37,7 +38,7 @@ def connect_player_to_game(game_id: int, user: CustomUser):
         raise GameDoesNotExist
 
     if game.status == Game.Status.FINISHED:
-        raise TheGameIsFinish
+        raise TheGameIsFinished
     if game.white_player == user:
         game.white_connected = True
 
@@ -51,6 +52,13 @@ def connect_player_to_game(game_id: int, user: CustomUser):
     if game.white_connected and game.black_connected and game.status == Game.Status.WAITING:
         game.status = Game.Status.IN_PROGRESS
         game.current_turn_started_at = timezone.now()
+        # call task than start count white time
+        task = check_opponent_time.apply_async(
+            args=[game_id, 0],
+            countdown=game.white_time_remaining,
+        )
+        game.pending_timeout_task_id = task.id
+
     game.save()
 
 
@@ -231,7 +239,7 @@ def check_or_update_time(game: Game, user: CustomUser):
         raise ExceededTimeError
 
     # If user does not exceed time we set up new remaining time for user
-    new_time_remaining = round((time_remaining - time_spend + game.time_control.increment_seconds), 0)
+    new_time_remaining = round((time_remaining - time_spend), 0)
     if is_white:
         game.white_time_remaining = new_time_remaining
 
@@ -299,7 +307,7 @@ def process_move(game: Game, user: CustomUser, move_uci: str) -> Move:
     return new_move
 
 
-def check_game_end(game: Game, last_move: Move):
+def check_game_end(game: Game, last_move: Move) -> str | None:
     """
     Checks if last made move does not finish the game if yes
     marks the game status as finished and correct game result if not
@@ -312,29 +320,35 @@ def check_game_end(game: Game, last_move: Move):
     if board.is_checkmate():
         is_white = last_move.player == game.white_player
         game.result = Game.Result.WHITE_WON if is_white else Game.Result.BLACK_WON
+        reason = "checkmate"
 
     # It the last move results in stalemate the game finished as draw
     elif board.is_stalemate():
         game.result = Game.Result.DRAW
+        reason = "stalemate"
 
     # If both players don't have enough materials to deliver checkmate the game is finished as draw
     elif board.is_insufficient_material():
         game.result = Game.Result.DRAW
+        reason = "insufficient_material"
 
     # If neither player moves a pawn or makes a capture for 50 full moves, the game ends in a draw.
     elif board.halfmove_clock >= 100:  # <-- 50 full moves so 100 half moves
         game.result = Game.Result.DRAW
+        reason = "fifty_move_rule"
 
     # If players made the same chess position 3 times the game is finished as draw
     elif _has_threefold_repetition(game):
         game.result = Game.Result.DRAW
+        reason = "threefold_repetition_position"
 
     else:
-        return
+        return None
 
     game.status = Game.Status.FINISHED
     game.finished_at = timezone.now()
     game.save()
+    return reason
 
 
 def _has_threefold_repetition(game: Game) -> bool:
@@ -351,3 +365,8 @@ def _has_threefold_repetition(game: Game) -> bool:
         board.push(chess.Move.from_uci(move_uci))
 
     return board.can_claim_threefold_repetition()
+
+
+def update_pending_task_id(game: Game, task_id: str) -> None:
+    game.pending_timeout_task_id = task_id
+    game.save()

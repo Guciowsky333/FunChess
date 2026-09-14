@@ -1,5 +1,6 @@
 import json
 
+from celery.result import AsyncResult
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
 
@@ -12,7 +13,7 @@ from games.exceptions import (
     InvalidMoveFormat,
     NotOpponentDrawOffer,
     PlayerDoesNotBelongToGameError,
-    TheGameIsFinish,
+    TheGameIsFinished,
 )
 from games.models import Game
 from games.services import (
@@ -25,6 +26,7 @@ from games.services import (
     get_current_turn_player,
     process_move,
     surrender_the_game,
+    update_pending_task_id,
     validate_action,
 )
 from games.tasks import check_opponent_time
@@ -57,7 +59,7 @@ class GamesConsumer(AsyncWebsocketConsumer):
 
             await self.accept()
 
-        except TheGameIsFinish:
+        except TheGameIsFinished:
             await self.accept()
             await self.send(text_data=json.dumps({"error": "The game is already finished"}))
             await self.close()
@@ -184,12 +186,12 @@ class GamesConsumer(AsyncWebsocketConsumer):
                 return
 
             # Checks if made move does not finish the game
-            await database_sync_to_async(check_game_end)(game, last_move)
+            reason = await database_sync_to_async(check_game_end)(game, last_move)
             # If last move finished the game we send message to both players that the game is over
             if game.status == Game.Status.FINISHED:
                 await self.channel_layer.group_send(
                     f"game_{self.game_id}",
-                    {"type": "game_ended", "content": {"result": game.result, "reason": "Last move finished the game"}},
+                    {"type": "game_ended", "content": {"result": game.result, "reason": reason}},
                 )
                 return
 
@@ -197,12 +199,17 @@ class GamesConsumer(AsyncWebsocketConsumer):
             ply_number = last_move.ply_number
             is_white = current_player == game.white_player
             opponent_time_remaining = game.black_time_remaining if is_white else game.white_time_remaining
-            # We run our task to prevent case when opponent does not make a move at all
-            # The task will finish tha game and sends a message to both players after opponent's remaining time if they didn't make move
-            check_opponent_time.apply_async(
+
+            # Revoke the stale task from the previous move, if one is pending.
+            if game.pending_timeout_task_id:
+                AsyncResult(game.pending_timeout_task_id).revoke()
+
+            # Schedule a new task to track the opponent's time for their upcoming turn.
+            task = check_opponent_time.apply_async(
                 args=[self.game_id, ply_number],
                 countdown=opponent_time_remaining,
             )
+            await database_sync_to_async(update_pending_task_id)(game, task.id)
 
             # Sending info about last move to both players
             await self.channel_layer.group_send(

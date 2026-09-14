@@ -34,5 +34,5 @@ class IllegalChessMove(Exception):
     pass
 
 
-class TheGameIsFinish(Exception):
+class TheGameIsFinished(Exception):
     pass
