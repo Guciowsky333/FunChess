@@ -49,6 +49,11 @@ class GamesConsumer(AsyncWebsocketConsumer):
         self.game_id = self.scope["url_route"]["kwargs"]["game_id"]
         self.game_group_name = f"game_{self.game_id}"
         user = self.scope["user"]
+        if not user.is_authenticated:
+            await self.accept()
+            await self.send(text_data=json.dumps({"error": "Authentication required"}))
+            await self.close()
+            return
 
         try:
             await connect_player_to_game(self.game_id, user)

@@ -1,4 +1,5 @@
 import pytest
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from accounts.models import CustomUser
 from games.models import Game, Move, TimeControl
@@ -55,3 +56,8 @@ def test_move_promotion(test_game):
         # Position that enable black player to promotion
         resulting_fen="rnbqkbnr/pppp1ppp/8/8/5P2/4P1P1/Pp5P/RNBQKBNR b KQkq f3 0 5",
     )
+
+
+@pytest.fixture
+def access_token(test_user_1):
+    return str(RefreshToken.for_user(test_user_1).access_token)
