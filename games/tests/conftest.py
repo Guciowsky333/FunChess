@@ -61,3 +61,20 @@ def test_move_promotion(test_game):
 @pytest.fixture
 def access_token(test_user_1):
     return str(RefreshToken.for_user(test_user_1).access_token)
+
+
+@pytest.fixture
+def access_token_black(test_game_status_waiting):
+    black_player = test_game_status_waiting.black_player
+    return str(RefreshToken.for_user(black_player).access_token)
+
+
+@pytest.fixture
+def access_token_white(test_game_status_waiting):
+    white_player = test_game_status_waiting.white_player
+    return str(RefreshToken.for_user(white_player).access_token)
+
+
+@pytest.fixture
+def access_token_user_not_belongs_to_game(test_user_not_belongs_to_game):
+    return str(RefreshToken.for_user(test_user_not_belongs_to_game).access_token)
