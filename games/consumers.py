@@ -15,12 +15,14 @@ from games.exceptions import (
     NotOpponentDrawOffer,
     PlayerDoesNotBelongToGameError,
     TheGameIsFinished,
+    TooLongMessage,
 )
 from games.models import Game
 from games.services import (
     check_game_end,
     check_or_update_time,
     connect_player_to_game,
+    create_chat_message,
     draw_accept,
     draw_offer,
     draw_reject,
@@ -102,6 +104,10 @@ class GamesConsumer(AsyncWebsocketConsumer):
         except InvalidAction:
             await self.send(text_data=json.dumps({"error": "Invalid action"}))
             return
+        except TooLongMessage:
+            await self.send(text_data=json.dumps({"error": "Your message is too long max is 500 characters"}))
+            return
+
         except DrawOfferAlreadyExists:
             await self.send(text_data=json.dumps({"error": "Draw offer has already been sent"}))
             return
@@ -161,6 +167,7 @@ class GamesConsumer(AsyncWebsocketConsumer):
         # Sends message to all players
         if body["type"] == "chat":
             message = body["text"]
+            await database_sync_to_async(create_chat_message)(message, game, user)
             await self.channel_layer.group_send(
                 f"game_{self.game_id}",
                 {"type": "send_message", "content": {"player_id": user.id, "message": message}},

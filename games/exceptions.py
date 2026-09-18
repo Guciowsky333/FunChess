@@ -36,3 +36,7 @@ class IllegalChessMove(Exception):
 
 class TheGameIsFinished(Exception):
     pass
+
+
+class TooLongMessage(Exception):
+    pass

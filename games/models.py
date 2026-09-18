@@ -119,3 +119,10 @@ class Move(models.Model):
         constraints = [
             models.UniqueConstraint(fields=("game", "ply_number"), name="game_unique_player"),
         ]
+
+
+class ChatMessage(models.Model):
+    message = models.CharField(max_length=500)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    game = models.ForeignKey(Game, on_delete=models.CASCADE, related_name="messages")
+    created_at = models.DateTimeField(auto_now_add=True)

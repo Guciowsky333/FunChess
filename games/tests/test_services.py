@@ -12,10 +12,11 @@ from games.exceptions import (
     InvalidMoveFormat,
     NotOpponentDrawOffer,
 )
-from games.models import Game, Move
+from games.models import ChatMessage, Game, Move
 from games.services import (
     check_game_end,
     check_or_update_time,
+    create_chat_message,
     draw_accept,
     draw_offer,
     draw_reject,
@@ -139,6 +140,14 @@ def test_validate_action_invalid_body(test_game, body, expected_error):
 
     with pytest.raises(expected_error):
         validate_action(body, test_game, test_game.white_player)
+
+
+# Test for 'create_chat_message' function
+def test_create_chat_message(test_game):
+    message = "test message"
+    create_chat_message(message, test_game, test_game.white_player)
+
+    assert ChatMessage.objects.filter(message=message, game=test_game, user=test_game.white_player).exists()
 
 
 # Tests for 'surrender_the_game' function

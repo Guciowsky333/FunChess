@@ -14,8 +14,9 @@ from games.exceptions import (
     NotOpponentDrawOffer,
     PlayerDoesNotBelongToGameError,
     TheGameIsFinished,
+    TooLongMessage,
 )
-from games.models import Game, Move
+from games.models import ChatMessage, Game, Move
 from games.tasks import check_opponent_time
 
 
@@ -121,6 +122,8 @@ def validate_action(body: dict, game: Game, user: CustomUser) -> dict:
             raise InvalidAction
         if not body["text"]:
             raise InvalidAction
+        if len(body["text"]) > 500:
+            raise TooLongMessage
 
     # In this types body must contain only type filed
     if action_type in ("resign", "draw_offer", "draw_accept", "draw_reject"):
@@ -145,6 +148,17 @@ def validate_action(body: dict, game: Game, user: CustomUser) -> dict:
                 raise NotOpponentDrawOffer
 
     return body
+
+
+def create_chat_message(message: str, game: Game, user: CustomUser) -> None:
+    """
+    Creates ChatMessage modle inside the game.
+    """
+    ChatMessage.objects.create(
+        message=message,
+        game=game,
+        user=user,
+    )
 
 
 def surrender_the_game(game: Game, user: CustomUser) -> None:
