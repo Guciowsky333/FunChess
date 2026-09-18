@@ -44,6 +44,7 @@ def check_opponent_time(game_id: int, ply_number: int):
                 game.result = Game.Result.BLACK_WON
 
         game.status = Game.Status.FINISHED
+        game.reason = Game.Reason.TIMEOUT
         game.finished_at = timezone.now()
         game.save()
         channel_layer = get_channel_layer()

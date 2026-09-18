@@ -39,6 +39,7 @@ def test_check_opponent_time_white_win(test_game):
     check_opponent_time(test_game.id, ply_number)
     test_game.refresh_from_db()
     assert test_game.status == Game.Status.FINISHED
+    assert test_game.reason == Game.Reason.TIMEOUT
     # White should win the game because black was run out of time
     assert test_game.result == Game.Result.WHITE_WON
     assert test_game.finished_at is not None
@@ -59,6 +60,7 @@ def test_check_opponent_time_black_win(test_game):
     check_opponent_time(test_game.id, ply_number)
     test_game.refresh_from_db()
     assert test_game.status == Game.Status.FINISHED
+    assert test_game.reason == Game.Reason.TIMEOUT
     # Black should win the game because white was run out of time
     assert test_game.result == Game.Result.BLACK_WON
     assert test_game.finished_at is not None
@@ -84,6 +86,7 @@ def test_check_opponent_time_has_insufficiently_material(test_game):
     check_opponent_time(test_game.id, ply_number)
     test_game.refresh_from_db()
     assert test_game.status == Game.Status.FINISHED
+    assert test_game.reason == Game.Reason.TIMEOUT
     assert test_game.result == Game.Result.DRAW
     assert test_game.finished_at is not None
 

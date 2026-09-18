@@ -54,12 +54,25 @@ class Game(models.Model):
         WHITE = "white", "White"
         BLACK = "black", "Black"
 
+    class Reason(models.TextChoices):
+        CHECKMATE = "checkmate", "Checkmate"
+        STALEMATE = "stalemate", "Stalemate"
+        TIMEOUT = "timeout", "Timeout"
+        SURRENDER = "surrender", "Surrender"
+        DRAW_ACCEPTED = "draw_accepted", "Draw accepted"
+        INSUFFICIENT_MATERIAL = "insufficient_material", "Insufficient material"
+        FIFTY_MOVE_RULE = "fifty_move_rule", "Fifty-move rule"
+        THREEFOLD_REPETITION = "threefold_repetition", "Threefold repetition"
+
     # id of last called task 'check_opponent_time' during the game
     pending_timeout_task_id = models.CharField(max_length=36, null=True, blank=True)
 
     result = models.CharField(choices=Result.choices, max_length=9, blank=True, null=True)
 
     status = models.CharField(choices=Status.choices, max_length=11, default=Status.WAITING)
+
+    reason = models.CharField(choices=Reason.choices, max_length=21, blank=True, null=True)
+
     white_connected = models.BooleanField(default=False)
     black_connected = models.BooleanField(default=False)
 
