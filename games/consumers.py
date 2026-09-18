@@ -98,7 +98,7 @@ class GamesConsumer(AsyncWebsocketConsumer):
 
         # Checks if player provided correct action
         try:
-            body = await database_sync_to_async(validate_action)(data, game, user)
+            body = validate_action(data, game, user)
         except InvalidAction:
             await self.send(text_data=json.dumps({"error": "Invalid action"}))
             return

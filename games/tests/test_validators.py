@@ -16,7 +16,7 @@ def test_validate_chess_square_valid():
     [
         # value must contain 2 characters
         pytest.param("e", id="Too short"),
-        pytest.param("e", id="Too Long"),
+        pytest.param("eee", id="Too Long"),
         # Allowed columns "abcdefgh"
         pytest.param("x5", id="Invalid column"),
         # Allowed rows "12345678"
