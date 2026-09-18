@@ -98,6 +98,11 @@ class GamesConsumer(AsyncWebsocketConsumer):
         game = await get_game(self.game_id)
         user = self.scope["user"]
 
+        # Both players must connect to the game then the status will be IN_PROGRESS
+        if game.status != Game.Status.IN_PROGRESS:
+            await self.send(text_data=json.dumps({"error": "Game is not in progress"}))
+            return
+
         # Checks if player provided correct action
         try:
             body = validate_action(data, game, user)
