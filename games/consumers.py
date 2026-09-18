@@ -133,6 +133,11 @@ class GamesConsumer(AsyncWebsocketConsumer):
         current_player = await database_sync_to_async(get_current_turn_player)(game)
         if body["type"] == "resign":
             await database_sync_to_async(surrender_the_game)(game, current_player)
+
+            # Revoke the stale task from the previous move, if one is pending.
+            if game.pending_timeout_task_id:
+                AsyncResult(game.pending_timeout_task_id).revoke()
+
             await self.channel_layer.group_send(
                 f"game_{self.game_id}",
                 {"type": "game_ended", "content": {"result": game.result, "reason": "surrender"}},
@@ -163,6 +168,11 @@ class GamesConsumer(AsyncWebsocketConsumer):
         # Accepting draw offer the game is finished as draw
         if body["type"] == "draw_accept":
             await database_sync_to_async(draw_accept)(game)
+
+            # Revoke the stale task from the previous move, if one is pending.
+            if game.pending_timeout_task_id:
+                AsyncResult(game.pending_timeout_task_id).revoke()
+
             await self.channel_layer.group_send(
                 f"game_{self.game_id}",
                 {"type": "game_ended", "content": {"result": game.result, "reason": "draw_accepted"}},
