@@ -34,18 +34,57 @@ class TimeControl(models.Model):
     initial_time_seconds = models.PositiveIntegerField()
     increment_seconds = models.PositiveIntegerField(default=0)
 
+    def __str__(self):
+        minutes = self.initial_time_seconds // 60
+        return f"{minutes}+{self.increment_seconds}"
+
 
 class Game(models.Model):
     class Result(models.TextChoices):
         WHITE_WON = "white_won", "White Won"
         BLACK_WON = "black_won", "Black Won"
         DRAW = "draw", "Draw"
-        IN_PROGRESS = "in_progress", "In Progress"
 
-    result = models.CharField(choices=Result.choices, max_length=11)
+    class Status(models.TextChoices):
+        WAITING = "waiting", "Waiting"
+        IN_PROGRESS = "in_progress", "In Progress"
+        FINISHED = "finished", "Finished"
+
+    class DrawOfferedBy(models.TextChoices):
+        WHITE = "white", "White"
+        BLACK = "black", "Black"
+
+    class Reason(models.TextChoices):
+        CHECKMATE = "checkmate", "Checkmate"
+        STALEMATE = "stalemate", "Stalemate"
+        TIMEOUT = "timeout", "Timeout"
+        SURRENDER = "surrender", "Surrender"
+        DRAW_ACCEPTED = "draw_accepted", "Draw accepted"
+        INSUFFICIENT_MATERIAL = "insufficient_material", "Insufficient material"
+        FIFTY_MOVE_RULE = "fifty_move_rule", "Fifty-move rule"
+        THREEFOLD_REPETITION = "threefold_repetition", "Threefold repetition"
+
+    # id of last called task 'check_opponent_time' during the game
+    pending_timeout_task_id = models.CharField(max_length=36, null=True, blank=True)
+
+    result = models.CharField(choices=Result.choices, max_length=9, blank=True, null=True)
+
+    status = models.CharField(choices=Status.choices, max_length=11, default=Status.WAITING)
+
+    reason = models.CharField(choices=Reason.choices, max_length=21, blank=True, null=True)
+
+    white_connected = models.BooleanField(default=False)
+    black_connected = models.BooleanField(default=False)
+
     white_player = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="games_as_white")
     black_player = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="games_as_black")
-    time_control = models.ForeignKey(TimeControl, on_delete=models.CASCADE)
+    time_control = models.ForeignKey(TimeControl, on_delete=models.CASCADE, related_name="time_control")
+
+    white_time_remaining = models.PositiveIntegerField(null=True, blank=True)
+    black_time_remaining = models.PositiveIntegerField(null=True, blank=True)
+    current_turn_started_at = models.DateTimeField(null=True, blank=True)
+
+    draw_offered_by = models.CharField(choices=DrawOfferedBy.choices, max_length=5, blank=True, null=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     finished_at = models.DateTimeField(null=True, blank=True)
@@ -60,7 +99,7 @@ class Move(models.Model):
         QUEEN = "Q", "Queen"
         KING = "K", "King"
 
-    game = models.ForeignKey(Game, on_delete=models.CASCADE)
+    game = models.ForeignKey(Game, on_delete=models.CASCADE, related_name="moves")
     player = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
 
     ply_number = models.PositiveIntegerField()
@@ -80,3 +119,10 @@ class Move(models.Model):
         constraints = [
             models.UniqueConstraint(fields=("game", "ply_number"), name="game_unique_player"),
         ]
+
+
+class ChatMessage(models.Model):
+    message = models.CharField(max_length=500)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    game = models.ForeignKey(Game, on_delete=models.CASCADE, related_name="messages")
+    created_at = models.DateTimeField(auto_now_add=True)
