@@ -16,6 +16,7 @@ def check_opponent_time(game_id: int, ply_number: int):
     are the same it means that opponent's didn't make a move during his time so task
     automatically finish the game otherwise it does nothing.
     """
+    from games.services import change_players_ratings_after_game
 
     game = Game.objects.get(id=game_id)
     # The game must has status "IN_PROGRESS"
@@ -47,6 +48,9 @@ def check_opponent_time(game_id: int, ply_number: int):
         game.reason = Game.Reason.TIMEOUT
         game.finished_at = timezone.now()
         game.save()
+
+        # Updates players ratings
+        change_players_ratings_after_game(game)
         channel_layer = get_channel_layer()
 
         # Sending message to both player that the game is over

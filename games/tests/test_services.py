@@ -11,9 +11,11 @@ from games.exceptions import (
     InvalidAction,
     InvalidMoveFormat,
     NotOpponentDrawOffer,
+    TheGameIsNotOver,
 )
 from games.models import ChatMessage, Game, Move
 from games.services import (
+    change_players_ratings_after_game,
     check_game_end,
     check_or_update_time,
     create_chat_message,
@@ -482,3 +484,88 @@ def test_check_game_end_has_threefold_repetition(test_game):
     assert test_game.reason == Game.Reason.THREEFOLD_REPETITION
     assert test_game.result == Game.Result.DRAW
     assert test_game.finished_at is not None
+
+
+# Tests for 'change_players_ratings_after_game' function
+# In all tests white players has 1200 rating and black has 1000
+
+
+def test_change_players_ratings_after_game_white_won(test_game_with_updated_ratings):
+    """
+    When white has been won the game they should gain 8 rating points and black
+    should lose 8 rating points.
+    """
+
+    game, white_rating, black_rating = test_game_with_updated_ratings
+    game.result = Game.Result.WHITE_WON
+
+    change_players_ratings_after_game(game)
+    white_rating.refresh_from_db()
+    black_rating.refresh_from_db()
+
+    assert white_rating.rating == 1200 + 8
+    assert black_rating.rating == 1000 - 8
+
+
+def test_change_players_ratings_after_game_black_won(test_game_with_updated_ratings):
+    """
+    When black has been won the game they should gain 24 rating points and white
+    should lose 24 rating points.
+    """
+
+    game, white_rating, black_rating = test_game_with_updated_ratings
+    game.result = Game.Result.BLACK_WON
+
+    change_players_ratings_after_game(game)
+    white_rating.refresh_from_db()
+    black_rating.refresh_from_db()
+
+    assert white_rating.rating == 1200 - 24
+    assert black_rating.rating == 1000 + 24
+
+
+def test_change_players_ratings_after_game_draw(test_game_with_updated_ratings):
+    """
+    When the game has been finished as draw black should gain 8 rating points and white
+    should lose 8 rating points. Because white has higher rating than black.
+    """
+
+    game, white_rating, black_rating = test_game_with_updated_ratings
+    game.result = Game.Result.DRAW
+
+    change_players_ratings_after_game(game)
+    white_rating.refresh_from_db()
+    black_rating.refresh_from_db()
+    assert white_rating.rating == 1200 - 8
+    assert black_rating.rating == 1000 + 8
+
+
+@pytest.mark.parametrize(
+    "game_status",
+    [
+        pytest.param(Game.Status.WAITING, id="The game has status 'WAITING'"),
+        pytest.param(Game.Status.IN_PROGRESS, id="The game has status 'IN_PROGRESS'"),
+    ],
+)
+def test_change_players_ratings_after_game_status_is_not_finished(test_game, game_status):
+    """
+    Our function 'change_players_ratings_after_game' adds ratings only when the game is over
+    and has status as finished. In this test we set up status in our test_game as different that 'FINISHED'
+    and expected 'TheGameIsNotOver' error.
+    """
+
+    test_game.status = game_status
+
+    with pytest.raises(TheGameIsNotOver, match="The game is not over yet"):
+        change_players_ratings_after_game(test_game)
+
+
+def test_change_players_ratings_after_game_without_result(test_game):
+    """
+    If test_game does not have result allowed results ["WHITE_WON", "BLACK_WON", "DRAW"]
+    our function should raise ValueError.
+    """
+    test_game.status = Game.Status.FINISHED
+    test_game.result = None
+    with pytest.raises(ValueError, match="The game does not have result yet"):
+        change_players_ratings_after_game(test_game)

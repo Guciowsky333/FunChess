@@ -2,7 +2,7 @@ import pytest
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from accounts.models import CustomUser
-from games.models import Game, Move, TimeControl
+from games.models import Game, Move, TimeControl, UserRating
 
 
 @pytest.fixture
@@ -78,3 +78,21 @@ def access_token_white(test_game_status_waiting):
 @pytest.fixture
 def access_token_user_not_belongs_to_game(test_user_not_belongs_to_game):
     return str(RefreshToken.for_user(test_user_not_belongs_to_game).access_token)
+
+
+@pytest.fixture
+def test_game_with_updated_ratings(test_game):
+    """
+    Changes players ratings white has 1200 and black has 1000
+    """
+    test_game.status = Game.Status.FINISHED
+
+    white_rating = UserRating.objects.get(user=test_game.white_player, category=test_game.time_control.category)
+    black_rating = UserRating.objects.get(user=test_game.black_player, category=test_game.time_control.category)
+    white_rating.rating = 1200
+    black_rating.rating = 1000
+
+    white_rating.save()
+    black_rating.save()
+    test_game.save()
+    return test_game, white_rating, black_rating

@@ -40,3 +40,7 @@ class TheGameIsFinished(Exception):
 
 class TooLongMessage(Exception):
     pass
+
+
+class TheGameIsNotOver(Exception):
+    pass
