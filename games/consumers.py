@@ -7,7 +7,6 @@ from channels.generic.websocket import AsyncWebsocketConsumer
 from games.exceptions import (
     DrawOfferAlreadyExists,
     DrawOfferNotFound,
-    ExceededTimeError,
     GameDoesNotExist,
     IllegalChessMove,
     InvalidAction,
@@ -196,13 +195,20 @@ class GamesConsumer(AsyncWebsocketConsumer):
 
             # Update player time in game
             try:
-                await database_sync_to_async(check_or_update_time)(game, current_player)
-            except ExceededTimeError:
-                # If any player exceed time we send message to both players that the game is finished
-                await self.channel_layer.group_send(
-                    f"game_{self.game_id}",
-                    {"type": "game_ended", "content": {"result": game.result, "reason": "timeout"}},
-                )
+                await database_sync_to_async(check_or_update_time)(self.game_id, current_player)
+
+                # Refresh data in game to check whether the game hasn't been finished inside 'check_or_update_time' function
+                await database_sync_to_async(game.refresh_from_db)()
+                if game.status == Game.Status.FINISHED:
+                    await self.channel_layer.group_send(
+                        f"game_{self.game_id}",
+                        {"type": "game_ended", "content": {"result": game.result, "reason": "timeout"}},
+                    )
+                    return
+
+            except TheGameIsFinished:
+                # If the game was already finished at the moment when we called 'check_or_update_time' it mean that task finished this game
+                # Task should send message for both players that the game is over so when don't need to do it here again
                 return
 
             # Checks if provided move is correct and illegal

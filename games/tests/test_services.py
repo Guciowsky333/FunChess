@@ -6,7 +6,6 @@ from django.utils import timezone
 from games.exceptions import (
     DrawOfferAlreadyExists,
     DrawOfferNotFound,
-    ExceededTimeError,
     IllegalChessMove,
     InvalidAction,
     InvalidMoveFormat,
@@ -238,7 +237,10 @@ def test_check_or_update_time(test_game):
     Important: Adding increment only when player make a move in function "process_move"
     """
     test_game.current_turn_started_at = timezone.now() - timedelta(seconds=10)
-    check_or_update_time(test_game, test_game.white_player)
+    test_game.status = Game.Status.IN_PROGRESS
+    test_game.save()
+    check_or_update_time(test_game.id, test_game.white_player)
+    test_game.refresh_from_db()
     assert test_game.white_time_remaining == 600 - 10
 
     # Only after making a move, the player should receive a time increment.
@@ -246,42 +248,64 @@ def test_check_or_update_time(test_game):
     assert test_game.white_time_remaining == 590 + test_game.time_control.increment_seconds
 
 
-def test_check_or_update_time_exceed_time(test_game):
+def test_check_or_update_time_exceed_time(test_game_with_updated_ratings):
     """
     current_turn_started_at is set 601 seconds initial time is 600s so it means
-    that user exceeds time, so expected that game should be over and user should lose
+    that user exceeds time, so expected that game should be over and user should lose.
+    And also expected that players rating will be changed
     """
-    test_game.current_turn_started_at = timezone.now() - timedelta(seconds=601)
-    with pytest.raises(ExceededTimeError):
-        check_or_update_time(test_game, test_game.white_player)
-    assert test_game.status == Game.Status.FINISHED
-    assert test_game.reason == Game.Reason.TIMEOUT
-    assert test_game.result == Game.Result.BLACK_WON
+    game, white_rating, black_rating = test_game_with_updated_ratings
+    game.current_turn_started_at = timezone.now() - timedelta(seconds=601)
+    game.status = Game.Status.IN_PROGRESS
+    game.save()
+
+    check_or_update_time(game.id, game.white_player)
+    game.refresh_from_db()
+    # White had 1200 and black had 1000 when white exceeded time they should lose 24 and black should gain 24
+    white_rating.refresh_from_db()
+    black_rating.refresh_from_db()
+
+    assert game.status == Game.Status.FINISHED
+    assert game.reason == Game.Reason.TIMEOUT
+    assert game.result == Game.Result.BLACK_WON
+    assert white_rating.rating == 1200 - 24
+    assert black_rating.rating == 1000 + 24
 
 
-def test_check_or_update_time_exceed_time_draw(test_game):
+def test_check_or_update_time_exceed_time_draw(test_game_with_updated_ratings):
     """
     The same rules as in "test_check_or_update_time_exceed_time" but this time
     user's opponent has insufficiently chess material to deliver checkmate so the game
     should be finished as draw.
     """
+    game, white_rating, black_rating = test_game_with_updated_ratings
 
     # Create chess position where white has insufficiently material
     Move.objects.create(
-        game=test_game,
-        player=test_game.white_player,
+        game=game,
+        player=game.white_player,
         ply_number=11,
         from_square="e1",
         to_square="e2",
         piece=Move.Piece.KING,
         resulting_fen="3qk3/8/8/8/8/8/8/4K3 w - - 0 1",
     )
-    test_game.current_turn_started_at = timezone.now() - timedelta(seconds=601)
-    with pytest.raises(ExceededTimeError):
-        check_or_update_time(test_game, test_game.black_player)
-    assert test_game.status == Game.Status.FINISHED
-    assert test_game.reason == Game.Reason.TIMEOUT
-    assert test_game.result == Game.Result.DRAW
+    game.current_turn_started_at = timezone.now() - timedelta(seconds=601)
+    game.status = Game.Status.IN_PROGRESS
+    game.save()
+
+    check_or_update_time(game.id, game.black_player)
+    game.refresh_from_db()
+
+    # White had 1200 and black had 1000 when white exceeded time but the game finished as drwa white should lose 8 points of rating and black should gain 8 points
+    white_rating.refresh_from_db()
+    black_rating.refresh_from_db()
+
+    assert game.status == Game.Status.FINISHED
+    assert game.reason == Game.Reason.TIMEOUT
+    assert game.result == Game.Result.DRAW
+    assert white_rating.rating == 1200 - 8
+    assert black_rating.rating == 1000 + 8
 
 
 # Tests for 'process_move' function

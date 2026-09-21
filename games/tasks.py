@@ -2,6 +2,7 @@ import chess
 from asgiref.sync import async_to_sync
 from celery import shared_task
 from channels.layers import get_channel_layer
+from django.db import transaction
 from django.utils import timezone
 
 from games.models import Game
@@ -18,47 +19,48 @@ def check_opponent_time(game_id: int, ply_number: int):
     """
     from games.services import change_players_ratings_after_game
 
-    game = Game.objects.get(id=game_id)
-    # The game must has status "IN_PROGRESS"
-    if game.status != Game.Status.IN_PROGRESS:
-        return
-    number_of_moves = game.moves.count()
+    with transaction.atomic():
+        game = Game.objects.select_for_update().get(id=game_id)
+        # The game must has status "IN_PROGRESS"
+        if game.status != Game.Status.IN_PROGRESS:
+            return
+        number_of_moves = game.moves.count()
 
-    # If number of moves remains unchanged the game is finished
-    if number_of_moves == ply_number:
-        # Checks if the opponent of the player who is run out of time has enough material to deliver checkmate
-        last_move = game.moves.order_by("-ply_number").first()
-        if not last_move:
-            board = chess.Board()
-        else:
-            board = chess.Board(last_move.resulting_fen)
-
-        # If player who still has time does not have a material the game is finished as draw
-        if board.has_insufficient_material(chess.WHITE if number_of_moves % 2 == 1 else chess.BLACK):
-            game.result = Game.Result.DRAW
-
-        # If the player who has still time has enough material to deliver checkmate he is winning the game
-        else:
-            if number_of_moves % 2 == 1:
-                game.result = Game.Result.WHITE_WON
+        # If number of moves remains unchanged the game is finished
+        if number_of_moves == ply_number:
+            # Checks if the opponent of the player who is run out of time has enough material to deliver checkmate
+            last_move = game.moves.order_by("-ply_number").first()
+            if not last_move:
+                board = chess.Board()
             else:
-                game.result = Game.Result.BLACK_WON
+                board = chess.Board(last_move.resulting_fen)
 
-        game.status = Game.Status.FINISHED
-        game.reason = Game.Reason.TIMEOUT
-        game.finished_at = timezone.now()
-        game.save()
+            # If player who still has time does not have a material the game is finished as draw
+            if board.has_insufficient_material(chess.WHITE if number_of_moves % 2 == 1 else chess.BLACK):
+                game.result = Game.Result.DRAW
 
-        # Updates players ratings
-        change_players_ratings_after_game(game)
-        channel_layer = get_channel_layer()
+            # If the player who has still time has enough material to deliver checkmate he is winning the game
+            else:
+                if number_of_moves % 2 == 1:
+                    game.result = Game.Result.WHITE_WON
+                else:
+                    game.result = Game.Result.BLACK_WON
 
-        # Sending message to both player that the game is over
-        async_to_sync(channel_layer.group_send)(
-            f"game_{game_id}",
-            {"type": "game_ended", "content": {"result": game.result, "reason": "timeout"}},
-        )
+            game.status = Game.Status.FINISHED
+            game.reason = Game.Reason.TIMEOUT
+            game.finished_at = timezone.now()
+            game.save()
 
-    # If number of moves has been changed task does not change anything in the game
-    else:
-        pass
+            # Updates players ratings
+            change_players_ratings_after_game(game)
+            channel_layer = get_channel_layer()
+
+            # Sending message to both player that the game is over
+            async_to_sync(channel_layer.group_send)(
+                f"game_{game_id}",
+                {"type": "game_ended", "content": {"result": game.result, "reason": "timeout"}},
+            )
+
+        # If number of moves has been changed task does not change anything in the game
+        else:
+            pass

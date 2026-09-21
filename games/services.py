@@ -1,12 +1,12 @@
 import chess
 from channels.db import database_sync_to_async
+from django.db import transaction
 from django.utils import timezone
 
 from accounts.models import CustomUser
 from games.exceptions import (
     DrawOfferAlreadyExists,
     DrawOfferNotFound,
-    ExceededTimeError,
     GameDoesNotExist,
     IllegalChessMove,
     InvalidAction,
@@ -226,55 +226,63 @@ def get_current_turn_player(game: Game) -> CustomUser:
         return game.black_player
 
 
-def check_or_update_time(game: Game, user: CustomUser):
+def check_or_update_time(game_id: int, user: CustomUser):
     """
     Checks if user does not exceed time limit at game.
     If yes game is over and user lose it if no subtracts time that user spend
     to make a move and add increment time if game has it.
     """
+    with transaction.atomic():
+        # Uses transaction atomic here to prevent double check time by celery task "check_opponent_time" and this function
+        game = Game.objects.select_for_update().get(id=game_id)
 
-    time_spend = (timezone.now() - game.current_turn_started_at).total_seconds()
+        # If the game has different status that IN_PROGRESS it means that our
+        # task has already finished it and updated players ratings so we don't need to do it agin here
+        if game.status != Game.Status.IN_PROGRESS:
+            raise TheGameIsFinished
 
-    is_white = user == game.white_player
-    time_remaining = game.white_time_remaining if is_white else game.black_time_remaining
+        time_spend = (timezone.now() - game.current_turn_started_at).total_seconds()
 
-    # If user exceed time control the game is over
-    if time_remaining - time_spend <= 0:
-        game.status = Game.Status.FINISHED
-        game.reason = Game.Reason.TIMEOUT
+        is_white = user == game.white_player
+        time_remaining = game.white_time_remaining if is_white else game.black_time_remaining
 
-        last_move = game.moves.order_by("-ply_number").first()
+        # If user exceed time control the game is over
+        if time_remaining - time_spend <= 0:
+            game.status = Game.Status.FINISHED
+            game.reason = Game.Reason.TIMEOUT
 
-        if not last_move:
-            # If it is the first move we take initial chess position
-            board = chess.Board()
+            last_move = game.moves.order_by("-ply_number").first()
+
+            if not last_move:
+                # If it is the first move we take initial chess position
+                board = chess.Board()
+            else:
+                # If not we take position from last move at the game
+                board = chess.Board(last_move.resulting_fen)
+
+            # Checks if user's opponent has enough material to deliver checkmate.
+            # If not game result is draw. "not is_white" because we check user's opponent
+            if board.has_insufficient_material(not is_white):
+                game.result = Game.Result.DRAW
+            else:
+                game.result = Game.Result.BLACK_WON if is_white else Game.Result.WHITE_WON
+
+            game.finished_at = timezone.now()
+            game.save()
+
+            # Updates players ratings
+            change_players_ratings_after_game(game)
+            return
+
+        # If user does not exceed time we set up new remaining time for user
+        new_time_remaining = round((time_remaining - time_spend), 0)
+
+        if is_white:
+            game.white_time_remaining = new_time_remaining
+
         else:
-            # If not we take position from last move at the game
-            board = chess.Board(last_move.resulting_fen)
-
-        # Checks if user's opponent has enough material to deliver checkmate.
-        # If not game result is draw. "not is_white" because we check user's opponent
-        if board.has_insufficient_material(not is_white):
-            game.result = Game.Result.DRAW
-        else:
-            game.result = Game.Result.BLACK_WON if is_white else Game.Result.WHITE_WON
-
-        game.finished_at = timezone.now()
-        change_players_ratings_after_game(game)
+            game.black_time_remaining = new_time_remaining
         game.save()
-
-        # Updates players ratings
-        change_players_ratings_after_game(game)
-        raise ExceededTimeError
-
-    # If user does not exceed time we set up new remaining time for user
-    new_time_remaining = round((time_remaining - time_spend), 0)
-    if is_white:
-        game.white_time_remaining = new_time_remaining
-
-    else:
-        game.black_time_remaining = new_time_remaining
-    game.save()
 
 
 def process_move(game: Game, user: CustomUser, move_uci: str) -> Move:
