@@ -1,12 +1,12 @@
 import chess
 from channels.db import database_sync_to_async
+from django.db import transaction
 from django.utils import timezone
 
 from accounts.models import CustomUser
 from games.exceptions import (
     DrawOfferAlreadyExists,
     DrawOfferNotFound,
-    ExceededTimeError,
     GameDoesNotExist,
     IllegalChessMove,
     InvalidAction,
@@ -14,9 +14,10 @@ from games.exceptions import (
     NotOpponentDrawOffer,
     PlayerDoesNotBelongToGameError,
     TheGameIsFinished,
+    TheGameIsNotOver,
     TooLongMessage,
 )
-from games.models import ChatMessage, Game, Move
+from games.models import ChatMessage, Game, Move, UserRating
 from games.tasks import check_opponent_time
 
 
@@ -174,6 +175,9 @@ def surrender_the_game(game: Game, user: CustomUser) -> None:
     game.reason = Game.Reason.SURRENDER
     game.save()
 
+    # Updates players ratings
+    change_players_ratings_after_game(game)
+
 
 def draw_offer(game: Game, user: CustomUser) -> None:
     """
@@ -195,6 +199,9 @@ def draw_accept(game: Game) -> None:
     game.reason = Game.Reason.DRAW_ACCEPTED
     game.finished_at = timezone.now()
     game.save()
+
+    # Updates players ratings
+    change_players_ratings_after_game(game)
 
 
 def draw_reject(game: Game) -> None:
@@ -219,50 +226,63 @@ def get_current_turn_player(game: Game) -> CustomUser:
         return game.black_player
 
 
-def check_or_update_time(game: Game, user: CustomUser):
+def check_or_update_time(game_id: int, user: CustomUser):
     """
     Checks if user does not exceed time limit at game.
     If yes game is over and user lose it if no subtracts time that user spend
     to make a move and add increment time if game has it.
     """
+    with transaction.atomic():
+        # Uses transaction atomic here to prevent double check time by celery task "check_opponent_time" and this function
+        game = Game.objects.select_for_update().get(id=game_id)
 
-    time_spend = (timezone.now() - game.current_turn_started_at).total_seconds()
+        # If the game has different status that IN_PROGRESS it means that our
+        # task has already finished it and updated players ratings so we don't need to do it agin here
+        if game.status != Game.Status.IN_PROGRESS:
+            raise TheGameIsFinished
 
-    is_white = user == game.white_player
-    time_remaining = game.white_time_remaining if is_white else game.black_time_remaining
+        time_spend = (timezone.now() - game.current_turn_started_at).total_seconds()
 
-    # If user exceed time control the game is over
-    if time_remaining - time_spend <= 0:
-        game.status = Game.Status.FINISHED
-        game.reason = Game.Reason.TIMEOUT
-        last_move = game.moves.order_by("-ply_number").first()
+        is_white = user == game.white_player
+        time_remaining = game.white_time_remaining if is_white else game.black_time_remaining
 
-        if not last_move:
-            # If it is the first move we take initial chess position
-            board = chess.Board()
+        # If user exceed time control the game is over
+        if time_remaining - time_spend <= 0:
+            game.status = Game.Status.FINISHED
+            game.reason = Game.Reason.TIMEOUT
+
+            last_move = game.moves.order_by("-ply_number").first()
+
+            if not last_move:
+                # If it is the first move we take initial chess position
+                board = chess.Board()
+            else:
+                # If not we take position from last move at the game
+                board = chess.Board(last_move.resulting_fen)
+
+            # Checks if user's opponent has enough material to deliver checkmate.
+            # If not game result is draw. "not is_white" because we check user's opponent
+            if board.has_insufficient_material(not is_white):
+                game.result = Game.Result.DRAW
+            else:
+                game.result = Game.Result.BLACK_WON if is_white else Game.Result.WHITE_WON
+
+            game.finished_at = timezone.now()
+            game.save()
+
+            # Updates players ratings
+            change_players_ratings_after_game(game)
+            return
+
+        # If user does not exceed time we set up new remaining time for user
+        new_time_remaining = round((time_remaining - time_spend), 0)
+
+        if is_white:
+            game.white_time_remaining = new_time_remaining
+
         else:
-            # If not we take position from last move at the game
-            board = chess.Board(last_move.resulting_fen)
-
-        # Checks if user's opponent has enough material to deliver checkmate.
-        # If not game result is draw. "not is_white" because we check user's opponent
-        if board.has_insufficient_material(not is_white):
-            game.result = Game.Result.DRAW
-        else:
-            game.result = Game.Result.BLACK_WON if is_white else Game.Result.WHITE_WON
-
-        game.finished_at = timezone.now()
+            game.black_time_remaining = new_time_remaining
         game.save()
-        raise ExceededTimeError
-
-    # If user does not exceed time we set up new remaining time for user
-    new_time_remaining = round((time_remaining - time_spend), 0)
-    if is_white:
-        game.white_time_remaining = new_time_remaining
-
-    else:
-        game.black_time_remaining = new_time_remaining
-    game.save()
 
 
 def process_move(game: Game, user: CustomUser, move_uci: str) -> Move:
@@ -370,6 +390,9 @@ def check_game_end(game: Game, last_move: Move) -> str | None:
     game.status = Game.Status.FINISHED
     game.finished_at = timezone.now()
     game.save()
+
+    # Updates players ratings
+    change_players_ratings_after_game(game)
     return reason
 
 
@@ -392,3 +415,47 @@ def _has_threefold_repetition(game: Game) -> bool:
 def update_pending_task_id(game: Game, task_id: str) -> None:
     game.pending_timeout_task_id = task_id
     game.save()
+
+
+def _calculate_elo_change(rating_a: int, rating_b: int, score_a: float, k: int = 32) -> int:
+    """
+    rating_a/rating_b: current Elo of both players
+    score_a: 1.0 win, 0.5 draw, 0.0 loss — from player A's perspective
+    Returns the rating change (+/-) to apply to player A
+    """
+    expected_a = 1 / (1 + 10 ** ((rating_b - rating_a) / 400))
+    return round(k * (score_a - expected_a))
+
+
+def change_players_ratings_after_game(game: Game) -> None:
+    """
+    Uses '_calculate_elo_change' function to calculate rating that players should get after game is finished based on
+    game result and players ratings, and updates rating of both players by that numbers.
+    """
+
+    if game.status != Game.Status.FINISHED:
+        raise TheGameIsNotOver("The game is not over yet")
+    if game.result == Game.Result.WHITE_WON:
+        score_a = 1.0
+
+    elif game.result == Game.Result.DRAW:
+        score_a = 0.5
+
+    elif game.result == Game.Result.BLACK_WON:
+        score_a = 0.0
+
+    else:
+        raise ValueError("The game does not have result yet")
+
+    game_type = game.time_control.category
+    white_rating = UserRating.objects.get(user=game.white_player, category=game_type)
+    black_rating = UserRating.objects.get(user=game.black_player, category=game_type)
+
+    white_change = _calculate_elo_change(white_rating.rating, black_rating.rating, score_a)
+    black_change = _calculate_elo_change(black_rating.rating, white_rating.rating, (1.0 - score_a))
+
+    white_rating.rating += white_change
+    black_rating.rating += black_change
+    white_rating.save()
+
+    black_rating.save()
