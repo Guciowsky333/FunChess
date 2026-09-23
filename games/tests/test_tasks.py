@@ -26,69 +26,114 @@ def test_check_opponent_time_opponent_made_move(test_game):
     assert not test_game.result
 
 
-def test_check_opponent_time_white_win(test_game):
+def test_check_opponent_time_white_win(test_game_with_updated_ratings):
     """
     In this test we check if "check_opponent_time" celery task correctly
     end the game if black player does not make a move on time.
+
+    Additionally, we check if task "check_opponent_time" correctly updates players ratings
+    when any of them didn't make a move on time. In this case white has 1200 and black has 1000 so
+    when black doesn't make a move they should lose 8 ratings and white should gain 8 ratings.
     """
-
+    game, white_rating, black_rating = test_game_with_updated_ratings
+    game.status = Game.Status.IN_PROGRESS
+    game.save()
     # White made the first move
-    process_move(test_game, test_game.white_player, "d2d4")
+    process_move(game, game.white_player, "d2d4")
 
-    ply_number = test_game.moves.count()
-    check_opponent_time(test_game.id, ply_number)
-    test_game.refresh_from_db()
-    assert test_game.status == Game.Status.FINISHED
-    assert test_game.reason == Game.Reason.TIMEOUT
+    ply_number = game.moves.count()
+    check_opponent_time(game.id, ply_number)
+    game.refresh_from_db()
+    white_rating.refresh_from_db()
+    black_rating.refresh_from_db()
+    assert game.status == Game.Status.FINISHED
+    assert game.reason == Game.Reason.TIMEOUT
+
     # White should win the game because black was run out of time
-    assert test_game.result == Game.Result.WHITE_WON
-    assert test_game.finished_at is not None
+    assert game.result == Game.Result.WHITE_WON
+    assert game.finished_at is not None
+
+    # Check players ratings when the game is over
+    assert white_rating.rating == 1200 + 8
+    assert black_rating.rating == 1000 - 8
 
 
-def test_check_opponent_time_black_win(test_game):
+def test_check_opponent_time_black_win(test_game_with_updated_ratings):
     """
     In this test we check if "check_opponent_time" celery task correctly
     end the game if white player does not make a move on time.
+
+    Additionally, we check if task "check_opponent_time" correctly updates players ratings
+    when any of them didn't make a move on time. In this case white has 1200 and black has 1000 so
+    when white doesn't make a move they should lose 24 ratings and black should gain 24 ratings.
     """
 
+    game, white_rating, black_rating = test_game_with_updated_ratings
+    game.status = Game.Status.IN_PROGRESS
+    game.save()
+
     # White made the first move
-    process_move(test_game, test_game.white_player, "d2d4")
+    process_move(game, game.white_player, "d2d4")
     # Black made the second move
-    process_move(test_game, test_game.black_player, "d7d5")
+    process_move(game, game.black_player, "d7d5")
 
-    ply_number = test_game.moves.count()
-    check_opponent_time(test_game.id, ply_number)
-    test_game.refresh_from_db()
-    assert test_game.status == Game.Status.FINISHED
-    assert test_game.reason == Game.Reason.TIMEOUT
+    ply_number = game.moves.count()
+    check_opponent_time(game.id, ply_number)
+    game.refresh_from_db()
+    white_rating.refresh_from_db()
+    black_rating.refresh_from_db()
+    assert game.status == Game.Status.FINISHED
+    assert game.reason == Game.Reason.TIMEOUT
+
     # Black should win the game because white was run out of time
-    assert test_game.result == Game.Result.BLACK_WON
-    assert test_game.finished_at is not None
+    assert game.result == Game.Result.BLACK_WON
+    assert game.finished_at is not None
+
+    # Check players ratings when the game is over
+    assert white_rating.rating == 1200 - 24
+    assert black_rating.rating == 1000 + 24
 
 
-def test_check_opponent_time_has_insufficiently_material(test_game):
+def test_check_opponent_time_has_insufficiently_material(test_game_with_updated_ratings):
     """
     In this test the opponent of the player was run out of time
     but player didn't have enough material to deliver checkmate so he can't win the game.
-    The game is finished as draw
+    The game is finished as draw.
+
+    Additionally, we check if task "check_opponent_time" correctly updates players ratings
+    when any of them didn't make a move on time. In this case white has 1200 rating and black has 1000
+    and the game is finished as draw so white should lose 8 ratings (Because white has more ratings than black)
+    adn blach should gain 8 ratings.
     """
+
+    game, white_rating, black_rating = test_game_with_updated_ratings
+    game.status = Game.Status.IN_PROGRESS
+    game.save()
+
     # Create move with fen where white has only king
     Move.objects.create(
-        game=test_game,
-        player=test_game.white_player,
+        game=game,
+        player=game.white_player,
         ply_number=1,
         from_square="e2",
         to_square="e1",
         piece=Move.Piece.KING,
         resulting_fen="4k2r/8/8/8/8/8/8/4K3 b - - 0 30",
     )
-    ply_number = test_game.moves.count()
-    check_opponent_time(test_game.id, ply_number)
-    test_game.refresh_from_db()
-    assert test_game.status == Game.Status.FINISHED
-    assert test_game.reason == Game.Reason.TIMEOUT
-    assert test_game.result == Game.Result.DRAW
-    assert test_game.finished_at is not None
+    ply_number = game.moves.count()
+    check_opponent_time(game.id, ply_number)
+    game.refresh_from_db()
+    white_rating.refresh_from_db()
+    black_rating.refresh_from_db()
+
+    assert game.status == Game.Status.FINISHED
+    assert game.reason == Game.Reason.TIMEOUT
+    assert game.result == Game.Result.DRAW
+    assert game.finished_at is not None
+
+    # Check players ratings when the game is over
+    assert white_rating.rating == 1200 - 8
+    assert black_rating.rating == 1000 + 8
 
 
 def test_check_opponent_time_game_status_is_not_in_progress(test_game):
