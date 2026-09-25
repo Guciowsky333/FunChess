@@ -6,8 +6,9 @@ from channels.db import database_sync_to_async
 from channels.testing import WebsocketCommunicator
 from django.utils import timezone
 
+from accounts.models import CustomUser
 from config.asgi import application
-from games.models import Game
+from games.models import ChatMessage, Game, Move
 
 
 @pytest.mark.asyncio
@@ -103,7 +104,7 @@ async def test_connect_both_players(test_game_status_waiting, access_token_black
     assert test_game_status_waiting.current_turn_started_at is not None
 
 
-# Checking the whole flow in receive in GamesConsumer
+# Checking the whole flow in receive in GamesConsumer related with adding ratings
 @pytest.mark.asyncio
 @pytest.mark.django_db(transaction=True)
 async def test_receive_resign(connected_players):
@@ -114,7 +115,6 @@ async def test_receive_resign(connected_players):
     black should win it and gain 24 points and white should lose 24 points.
     """
     game, white_rating, black_rating, white_communicator, black_communicator = connected_players
-    await database_sync_to_async(game.refresh_from_db)()
 
     await white_communicator.send_to(text_data=json.dumps({"type": "resign"}))
     response = await white_communicator.receive_from()
@@ -211,7 +211,6 @@ async def test_receive_last_move_ended_the_game(connected_players, test_move_bef
     gain 24 points.
     """
     game, white_rating, black_rating, white_communicator, black_communicator = connected_players
-    await database_sync_to_async(game.save)()
 
     await black_communicator.send_to(text_data=json.dumps({"type": "move", "from_square": "h4", "to_square": "f2"}))
     response = await white_communicator.receive_from()
@@ -229,3 +228,145 @@ async def test_receive_last_move_ended_the_game(connected_players, test_move_bef
 
     assert white_rating.rating == 1200 - 24
     assert black_rating.rating == 1000 + 24
+
+
+# Checking the whole flow in receive in GamesConsumer not related with adding ratings
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_receive_draw_offer(connected_players):
+    """
+    In this test white snet draw offer to his opponent, and we expected that our consumer will change filed
+    "draw_offered_by" inside our game as "WHITE" and sent message to black that white offer drwa.
+    """
+    game, white_rating, black_rating, white_communicator, black_communicator = connected_players
+
+    await white_communicator.send_to(text_data=json.dumps({"type": "draw_offer"}))
+
+    response = await black_communicator.receive_from()
+    data = json.loads(response)
+    assert data["player_id"] == white_communicator.scope["user"].id
+    assert data["type"] == "draw_offered"
+
+    # Refresh game to check if filed "draw_offered_by" has been changed correctly
+    await database_sync_to_async(game.refresh_from_db)()
+    assert game.draw_offered_by == Game.DrawOfferedBy.WHITE
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_receive_draw_offer_reject(connected_players):
+    """
+    In this test we manually change filed "draw_offered_by" as "WHITE" and expected that black player will be able
+    to reject this offer from white and that white will receive message about that and filed "draw_offered_by" will be
+    again empty
+    """
+
+    game, white_rating, black_rating, white_communicator, black_communicator = connected_players
+    game.draw_offered_by = Game.DrawOfferedBy.WHITE
+    await database_sync_to_async(game.save)()
+
+    # Only black can reject offer from white and only when filed "draw_offered_by" is not empty
+    await black_communicator.send_to(text_data=json.dumps({"type": "draw_reject"}))
+    response = await white_communicator.receive_from()
+    data = json.loads(response)
+    assert data["player_id"] == black_communicator.scope["user"].id
+    assert data["type"] == "draw_offer_rejected"
+
+    # Refresh game to check if filed "draw_offered_by" has been changed correctly
+    await database_sync_to_async(game.refresh_from_db)()
+    assert game.draw_offered_by is None
+
+
+@database_sync_to_async
+def _chat_message_exist(game: Game, user: CustomUser, message: str):
+    """
+    Helper that check if message with provided data exist
+    """
+    return ChatMessage.objects.filter(
+        game=game,
+        user_id=user,
+        message=message,
+    ).exists()
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_receive_chat_message(connected_players):
+    """
+    In this test we check whether both players are enable to send messages to each other during the game.
+    Sending message is allowed for any player who belong to the game regardless on the current turn and
+    the massage should reach both players.
+    """
+    game, white_rating, black_rating, white_communicator, black_communicator = connected_players
+
+    # Despite now is white turn black still can send a message to his opponent
+    await black_communicator.send_to(text_data=json.dumps({"type": "chat", "text": "test black message"}))
+    white_response = await white_communicator.receive_from()
+    black_response = await black_communicator.receive_from()
+    white_data = json.loads(white_response)
+    black_data = json.loads(black_response)
+
+    # Both consumers should receive the same message that black player sent
+    assert white_data["message"] == "test black message" and black_data["message"] == "test black message"
+    assert (
+        white_data["player_id"] == black_communicator.scope["user"].id
+        and black_data["player_id"] == black_communicator.scope["user"].id
+    )
+
+    # Expected that ChatMessage object has been created inside the game
+    assert await _chat_message_exist(game, black_communicator.scope["user"], "test black message")
+
+
+@database_sync_to_async
+def _move_exist(game: Game, player: CustomUser, from_square: str, to_square: str):
+    return Move.objects.filter(
+        game=game,
+        player=player,
+        from_square=from_square,
+        to_square=to_square,
+    ).exists()
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_receive_first_move(connected_players):
+    """
+    In this test white made normal firs move from d2 to d4, and we expect that
+    the Move object will be created correctly, and our consumer will send a message about that move
+    to both players.
+
+    Additionally: We subtract from field "current_turn_started_at" 10 seconds to simulate that white thought about that
+    move for 10 seconds so we except that the initially white time remaining (600 s) will be 10 seconds shorter
+    and also after move white should gain increment 5 seconds. So the finally white time remaining after move
+    should be 600 - 10 + 5 = 595 seconds.
+    """
+    game, white_rating, black_rating, white_communicator, black_communicator = connected_players
+    # Set current_turn_started_at and save game
+    game.current_turn_started_at = timezone.now() - timedelta(seconds=10)
+    await database_sync_to_async(game.save)()
+
+    # Only white can make a first move
+    await white_communicator.send_to(text_data=json.dumps({"type": "move", "from_square": "d2", "to_square": "d4"}))
+
+    white_response = await white_communicator.receive_from()
+    black_response = await black_communicator.receive_from()
+    white_data = json.loads(white_response)
+    black_data = json.loads(black_response)
+
+    # Refresh game to get new current_turn_started_at
+    await database_sync_to_async(game.refresh_from_db)()
+
+    assert white_data["white_time_remaining"] == 595 and black_data["white_time_remaining"] == 595
+    # Black's time should be without changes
+    assert white_data["black_time_remaining"] == 600 and black_data["black_time_remaining"] == 600
+    # White made move so player id should be white's id
+    assert (
+        white_data["player_id"] == white_communicator.scope["user"].id
+        and black_data["player_id"] == white_communicator.scope["user"].id
+    )
+    assert white_data["last_move_from_square"] == "d2" and black_data["last_move_from_square"] == "d2"
+    assert white_data["last_move_to_square"] == "d4" and black_data["last_move_to_square"] == "d4"
+
+    assert await _move_exist(game, white_communicator.scope["user"], "d2", "d4")

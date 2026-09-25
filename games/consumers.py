@@ -246,7 +246,7 @@ class GamesConsumer(AsyncWebsocketConsumer):
                 AsyncResult(game.pending_timeout_task_id).revoke()
 
             # Schedule a new task to track the opponent's time for their upcoming turn.
-            task = check_opponent_time.apply_async(
+            task = await database_sync_to_async(check_opponent_time.apply_async)(
                 args=[self.game_id, ply_number],
                 countdown=opponent_time_remaining,
             )

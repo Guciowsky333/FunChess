@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 import pytest
 import pytest_asyncio
 from channels.db import database_sync_to_async
@@ -126,23 +128,26 @@ async def connected_players(test_game_with_updated_ratings, access_token_white, 
     game.status = Game.Status.WAITING
     await database_sync_to_async(game.save)()
 
-    white_communicator = WebsocketCommunicator(
-        application,
-        f"ws/games/{game.id}/",
-        headers=[(b"cookie", f"access_token={access_token_white}".encode())],
-    )
-    black_communicator = WebsocketCommunicator(
-        application,
-        f"ws/games/{game.id}/",
-        headers=[(b"cookie", f"access_token={access_token_black}".encode())],
-    )
-    await white_communicator.connect()
-    await black_communicator.connect()
+    with patch("games.tasks.check_opponent_time.apply_async") as mock_apply_async:
+        mock_apply_async.return_value.id = "fake-task-id"
 
-    # The game status has been changed from WAITING to IN_PROGRESS
-    await database_sync_to_async(game.refresh_from_db)()
+        white_communicator = WebsocketCommunicator(
+            application,
+            f"ws/games/{game.id}/",
+            headers=[(b"cookie", f"access_token={access_token_white}".encode())],
+        )
+        black_communicator = WebsocketCommunicator(
+            application,
+            f"ws/games/{game.id}/",
+            headers=[(b"cookie", f"access_token={access_token_black}".encode())],
+        )
+        await white_communicator.connect()
+        await black_communicator.connect()
 
-    yield game, white_rating, black_rating, white_communicator, black_communicator
+        # The game status has been changed from WAITING to IN_PROGRESS
+        await database_sync_to_async(game.refresh_from_db)()
 
-    await black_communicator.disconnect()
-    await white_communicator.disconnect()
+        yield game, white_rating, black_rating, white_communicator, black_communicator
+
+        await black_communicator.disconnect()
+        await white_communicator.disconnect()
