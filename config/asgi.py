@@ -17,7 +17,7 @@ django_asgi_app = get_asgi_application()
 from channels.routing import ProtocolTypeRouter, URLRouter  # noqa: E402
 
 import games.routing  # noqa: E402
-from games.middlewares import JWTAuthMiddleware  # noqa: E402
+from config.middlewares import JWTAuthMiddleware  # noqa: E402
 
 application = ProtocolTypeRouter(
     {

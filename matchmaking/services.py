@@ -4,6 +4,7 @@ from django.db.models import Q
 
 from accounts.models import CustomUser
 from games.models import Game, TimeControl
+from matchmaking.exceptions import InvalidBody, TimeControlNotExist
 
 
 def _determine_players_color(
@@ -82,3 +83,27 @@ def create_game(player_a: CustomUser, player_b: CustomUser, time_control: TimeCo
         time_control=time_control,
     )
     return game.id
+
+
+def validate_matchmaking_request(body: dict) -> TimeControl:
+    """
+    Validates body in MatchMakingConsumer in this consumer users are enable to send only
+    time_control filed that must contains id of existing TimeControl object if all validations will pass
+    returns TimeControl object with provided id
+    """
+
+    time_control_id = body.get("time_control_id")
+
+    # Body must contain time_control_id key
+    if time_control_id is None:
+        raise InvalidBody
+
+    # Value of time_control_id must be int
+    if not isinstance(time_control_id, int):
+        raise InvalidBody
+
+    # Object TimeControl with provided id must exist
+    try:
+        return TimeControl.objects.get(id=time_control_id)
+    except TimeControl.DoesNotExist:
+        raise TimeControlNotExist

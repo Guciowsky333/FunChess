@@ -1,7 +1,11 @@
+import pytest
+
 from games.models import Game
-from matchmaking.services import create_game
+from matchmaking.exceptions import InvalidBody, TimeControlNotExist
+from matchmaking.services import create_game, validate_matchmaking_request
 
 
+# Tests for "create_game" function
 def test_create_game_player_a_with_higher_ratio_as_white(
     test_player_a, test_player_b, test_opponent, test_time_control
 ):
@@ -59,6 +63,7 @@ def test_create_game_player_a_without_any_game(test_player_a, test_player_b, tes
         white_player=test_player_b,
         black_player=test_opponent,
         time_control=test_time_control,
+        status=Game.Status.FINISHED,
     )
     create_game(test_player_a, test_player_b, test_time_control)
     game_id = create_game(test_player_a, test_player_b, test_time_control)
@@ -82,3 +87,27 @@ def test_create_game_both_players_with_the_same_white_ratio(
 
     assert new_game.white_player == test_player_a or test_player_b
     assert new_game.black_player == test_player_a if new_game.white_player == test_player_b else test_player_b
+
+
+# Tests for "validate_matchmaking_request" function
+def test_validate_matchmaking(test_time_control):
+    body = {
+        "time_control_id": test_time_control.id,
+    }
+    time_control = validate_matchmaking_request(body)
+    assert time_control == test_time_control
+
+
+@pytest.mark.parametrize(
+    "body, expected_error",
+    [
+        pytest.param({"test": "test"}, InvalidBody, id="Body without time_control_id"),
+        pytest.param({"time_control_id": ""}, InvalidBody, id="Body with empty time_control_id"),
+        pytest.param({"time_control_id": "string"}, InvalidBody, id="time_control_id is not int"),
+        pytest.param({"time_control_id": 5}, TimeControlNotExist, id="time_control_id with provided id not exists"),
+    ],
+)
+@pytest.mark.django_db
+def test_validate_matchmaking_request_invalid_body(body, expected_error):
+    with pytest.raises(expected_error):
+        validate_matchmaking_request(body)
