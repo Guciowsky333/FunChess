@@ -48,6 +48,46 @@ def create_match_making_entry(user: CustomUser, time_control: TimeControl) -> No
     )
 
 
+def finding_opponent(user_match_making_entry: MatchmakingEntry, time_control: TimeControl) -> MatchmakingEntry | None:
+    """
+    If found opponent's for user with rating as close as possible to user's rating (max + 150, min -150)
+    at provided time_control returns MatchmakingEntry object that contains opponent if not returns None
+    """
+
+    # Taking all possible user's opponents with ratings with a rating higher by a maximum of 150 or less by a maximum of 150
+    possible_opponents = list(
+        MatchmakingEntry.objects.select_for_update()
+        .filter(
+            time_control=time_control,
+            rating__gte=user_match_making_entry.rating - 150,
+            rating__lte=user_match_making_entry.rating + 150,
+        )
+        .exclude(user=user_match_making_entry.user)
+    )
+
+    # If currently there is no opponent for user returns None
+    if possible_opponents is None:
+        return None
+
+    # Selects the best candidate with the closet rating to the user
+    best_candidate = None
+    best_diff = None
+    for candidate in possible_opponents:
+        # If candidate has the same rating as user returns it immediately
+        if candidate.rating == user_match_making_entry.rating:
+            return candidate
+
+        # Uses abs to delete "-" in case where candidate has lowest rating than user
+        diff = abs(user_match_making_entry.rating - candidate.rating)
+
+        # If current candidate has smaller diff than previous one he becomes new best_candidate
+        if best_diff is None or diff < best_diff:
+            best_candidate = candidate
+            best_diff = diff
+
+    return best_candidate
+
+
 def _determine_players_color(
     player_a: CustomUser, player_b: CustomUser, time_control: TimeControl
 ) -> tuple[CustomUser, CustomUser]:

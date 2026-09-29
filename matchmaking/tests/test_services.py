@@ -3,7 +3,7 @@ import pytest
 from games.models import Game, UserRating
 from matchmaking.exceptions import InvalidBody, TimeControlNotExist
 from matchmaking.models import MatchmakingEntry
-from matchmaking.services import create_game, create_match_making_entry, validate_matchmaking_request
+from matchmaking.services import create_game, create_match_making_entry, finding_opponent, validate_matchmaking_request
 
 
 # Tests for "validate_matchmaking_request" function
@@ -42,6 +42,73 @@ def test_create_match_making_entry(test_player_a, test_time_control):
 
     create_match_making_entry(test_player_a, test_time_control)
     assert MatchmakingEntry.objects.filter(user=test_player_a, time_control=test_time_control, rating=1000).exists()
+
+
+# Tests for "finding_opponent" function
+def test_finding_opponent_returns_opponent_with_closet_rating(
+    test_player_a_matchmaking_entry, test_time_control, test_player_b, test_opponent
+):
+    """
+    test_player_a_matchmaking_entry has rating 1000
+
+    In this test we manually create 2 MatchmakingEntry with test_time_control
+    one with 1010 so diff between user's rating is 10 and second with rating 991 so diff between user's rating is 9,
+    and we expect that our function return second MatchmakingEntry object with 991 rating.
+    """
+
+    MatchmakingEntry.objects.create(
+        user=test_player_b,
+        time_control=test_time_control,
+        rating=1010,
+    )
+
+    second_matchmaking_entry = MatchmakingEntry.objects.create(
+        user=test_opponent,
+        time_control=test_time_control,
+        rating=991,
+    )
+
+    best_opponent = finding_opponent(test_player_a_matchmaking_entry, test_time_control)
+    assert best_opponent == second_matchmaking_entry
+
+
+def test_find_opponent_returns_none_when_no_entry_in_range(
+    test_player_a_matchmaking_entry, test_time_control, test_player_b, test_opponent
+):
+    """
+    Function "find_opponent" takes into accounts only players with maximum 150 ratings more that current user or maximum 150 less rating
+    than current user.
+
+    In this test we manually create 2 MatchmakingEntry with test_time_control but this time the first one will be
+    with too higher rating more than user's rating by 151 and second one will be with too low rating less than user's rating by 151.
+    Expect that function doesn't find any opponent and return "None"
+    """
+
+    # MatchmakingEntry higher by 151 points than test_player_a rating
+    MatchmakingEntry.objects.create(
+        user=test_player_b,
+        time_control=test_time_control,
+        rating=test_player_a_matchmaking_entry.rating + 151,
+    )
+    # MatchmakingEntry lower by 151 points than test_player_a rating
+    MatchmakingEntry.objects.create(
+        user=test_opponent,
+        time_control=test_time_control,
+        rating=test_player_a_matchmaking_entry.rating - 151,
+    )
+    best_opponent = finding_opponent(test_player_a_matchmaking_entry, test_time_control)
+    assert best_opponent is None
+
+
+def test_find_opponent_returns_none_when_nobody_else_is_finding_game(
+    test_player_a_matchmaking_entry, test_time_control
+):
+    """
+    In this test there is only one MatchmakingEntry with test_time_control "test_player_a_matchmaking_entry" so expect
+    that for test_player_a function will return "None" because nobody elso is finding game right now.
+    """
+    best_opponent = finding_opponent(test_player_a_matchmaking_entry, test_time_control)
+    assert best_opponent is None
 
 
 # Tests for "create_game" function

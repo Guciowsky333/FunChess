@@ -2,6 +2,7 @@ import pytest
 
 from accounts.models import CustomUser
 from games.models import TimeControl
+from matchmaking.models import MatchmakingEntry
 
 
 @pytest.fixture
@@ -22,3 +23,12 @@ def test_player_b(db):
 @pytest.fixture
 def test_opponent(db):
     return CustomUser.objects.create_user(email="opponent@com", username="test_opponent")
+
+
+@pytest.fixture
+def test_player_a_matchmaking_entry(db, test_player_a, test_time_control):
+    return MatchmakingEntry.objects.create(
+        user=test_player_a,
+        time_control=test_time_control,
+        rating=1000,
+    )
