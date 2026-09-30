@@ -1,5 +1,6 @@
 import random
 
+from django.db import transaction
 from django.db.models import Q
 
 from accounts.models import CustomUser
@@ -32,7 +33,7 @@ def validate_matchmaking_request(body: dict) -> TimeControl:
         raise TimeControlNotExist
 
 
-def create_match_making_entry(user: CustomUser, time_control: TimeControl) -> None:
+def create_matchmaking_entry(user: CustomUser, time_control: TimeControl) -> MatchmakingEntry:
     """
     Take user's rating at provided time_control and creates MatchMakingEntry for user
     """
@@ -41,17 +42,25 @@ def create_match_making_entry(user: CustomUser, time_control: TimeControl) -> No
         category=time_control.category,
     ).rating
 
-    MatchmakingEntry.objects.create(
+    return MatchmakingEntry.objects.create(
         user=user,
         time_control=time_control,
         rating=user_rating,
     )
 
 
-def finding_opponent(user_match_making_entry: MatchmakingEntry, time_control: TimeControl) -> MatchmakingEntry | None:
+def finding_opponent(
+    user_matchmaking_entry: MatchmakingEntry,
+    time_control: TimeControl,
+    tolerance: int = 150,
+) -> MatchmakingEntry | None:
     """
-    If found opponent's for user with rating as close as possible to user's rating (max + 150, min -150)
-    at provided time_control returns MatchmakingEntry object that contains opponent if not returns None
+    Finds the best available opponent for a user searching for a match at a given time control.
+
+    Looks up MatchmakingEntry objects at the same time_control, excluding the user's own entry,
+    whose rating differs from the user's rating by at most `tolerance` in either direction.
+    Returns the candidate with the closest rating (an exact match is returned immediately);
+    returns None if no candidate falls within the tolerance.
     """
 
     # Taking all possible user's opponents with ratings with a rating higher by a maximum of 150 or less by a maximum of 150
@@ -59,10 +68,10 @@ def finding_opponent(user_match_making_entry: MatchmakingEntry, time_control: Ti
         MatchmakingEntry.objects.select_for_update()
         .filter(
             time_control=time_control,
-            rating__gte=user_match_making_entry.rating - 150,
-            rating__lte=user_match_making_entry.rating + 150,
+            rating__gte=user_matchmaking_entry.rating - tolerance,
+            rating__lte=user_matchmaking_entry.rating + tolerance,
         )
-        .exclude(user=user_match_making_entry.user)
+        .exclude(user=user_matchmaking_entry.user)
     )
 
     # If currently there is no opponent for user returns None
@@ -74,11 +83,11 @@ def finding_opponent(user_match_making_entry: MatchmakingEntry, time_control: Ti
     best_diff = None
     for candidate in possible_opponents:
         # If candidate has the same rating as user returns it immediately
-        if candidate.rating == user_match_making_entry.rating:
+        if candidate.rating == user_matchmaking_entry.rating:
             return candidate
 
         # Uses abs to delete "-" in case where candidate has lowest rating than user
-        diff = abs(user_match_making_entry.rating - candidate.rating)
+        diff = abs(user_matchmaking_entry.rating - candidate.rating)
 
         # If current candidate has smaller diff than previous one he becomes new best_candidate
         if best_diff is None or diff < best_diff:
@@ -164,3 +173,36 @@ def create_game(player_a: CustomUser, player_b: CustomUser, time_control: TimeCo
         time_control=time_control,
     )
     return game.id
+
+
+def search_for_match(
+    user: CustomUser, time_control: TimeControl
+) -> tuple[bool, MatchmakingEntry | None, None | int, None | CustomUser]:
+    """
+    This function combines 'create_matchmaking_entry', 'finding_opponent' and 'create_game' and wraps them
+    in transaction.atomic to roll back all of them if something goes wrong.
+
+    Uses a game_created flag: if False, finding_opponent didn't find an opponent, and the function returns
+    user_matchmaking_entry so a celery task can try to find an opponent again with a wider tolerance for the user.
+    If True, finding_opponent found the user's opponent and create_game created the game, so the function returns
+    game_id and the opponent's CustomUser to send a message about the found game to the user's opponent.
+
+    Important: the returned tuple always has length 4, in the same order:
+    (game_created, MatchmakingEntry object for user, game_id, CustomUser object for user's opponent) — even when
+    some of those fields aren't relevant for the given outcome, they are filled in as None.
+    """
+    with transaction.atomic():
+        user_matchmaking_entry = create_matchmaking_entry(user, time_control)
+        user_opponent_matchmaking_entry = finding_opponent(user_matchmaking_entry, time_control, tolerance=150)
+        if user_opponent_matchmaking_entry is None:
+            game_created = False
+            return game_created, user_matchmaking_entry, None, None
+
+        game_id = create_game(user_matchmaking_entry.user, user_opponent_matchmaking_entry.user, time_control)
+        game_created = True
+        user_opponent = user_opponent_matchmaking_entry.user
+        # Removes user and his opponent MatchmakingEntry objects when the game has been created for them successfully
+        user_opponent_matchmaking_entry.delete()
+        user_matchmaking_entry.delete()
+
+        return game_created, None, game_id, user_opponent

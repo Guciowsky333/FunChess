@@ -3,7 +3,13 @@ import pytest
 from games.models import Game, UserRating
 from matchmaking.exceptions import InvalidBody, TimeControlNotExist
 from matchmaking.models import MatchmakingEntry
-from matchmaking.services import create_game, create_match_making_entry, finding_opponent, validate_matchmaking_request
+from matchmaking.services import (
+    create_game,
+    create_matchmaking_entry,
+    finding_opponent,
+    search_for_match,
+    validate_matchmaking_request,
+)
 
 
 # Tests for "validate_matchmaking_request" function
@@ -30,8 +36,8 @@ def test_validate_matchmaking_request_invalid_body(body, expected_error):
         validate_matchmaking_request(body)
 
 
-# Tests for "create_match_making_entry" function
-def test_create_match_making_entry(test_player_a, test_time_control):
+# Tests for "create_matchmaking_entry" function
+def test_create_matchmaking_entry(test_player_a, test_time_control):
     """
     In this test we set up test_player_a rating at test_time_control as 1000 and expect
     that our function will correctly create MatchMakingEntry for user
@@ -40,8 +46,10 @@ def test_create_match_making_entry(test_player_a, test_time_control):
     test_player_a_rating.rating = 1000
     test_player_a_rating.save()
 
-    create_match_making_entry(test_player_a, test_time_control)
-    assert MatchmakingEntry.objects.filter(user=test_player_a, time_control=test_time_control, rating=1000).exists()
+    user_matchmaking = create_matchmaking_entry(test_player_a, test_time_control)
+    assert user_matchmaking.user == test_player_a
+    assert user_matchmaking.time_control == test_time_control
+    assert user_matchmaking.rating == 1000
 
 
 # Tests for "finding_opponent" function
@@ -193,3 +201,45 @@ def test_create_game_both_players_with_the_same_white_ratio(
 
     assert new_game.white_player == test_player_a or test_player_b
     assert new_game.black_player == test_player_a if new_game.white_player == test_player_b else test_player_b
+
+
+# Tests for "search_for_match" function
+def test_search_for_match_find_opponent(test_player_a, test_opponent, test_time_control):
+    """
+    In this test function "find_opponent" found opponent for our user so we expect function search_for_match returns
+    game_created=True, our user MatchmakingEntry=None, game_id, user_opponent, and we expect that function removed both
+    MatchmakingEntry objects from database
+    """
+    # Create opponent MatchmakingEntry object
+    MatchmakingEntry.objects.create(
+        user=test_opponent,
+        time_control=test_time_control,
+        # test_player_a has 300 rating at our test_time_control
+        rating=350,
+    )
+    game_created, user_matchmaking_entry, game_id, user_opponent = search_for_match(test_player_a, test_time_control)
+    assert game_created
+    assert user_matchmaking_entry is None
+    assert game_id is not None
+    assert user_opponent == test_opponent
+
+    assert Game.objects.filter(pk=game_id).exists()
+    # Checking if function correctly removed MatchmakingEntry for both players
+    assert not MatchmakingEntry.objects.filter(user=test_player_a).exists()
+    assert not MatchmakingEntry.objects.filter(user=test_opponent).exists()
+
+
+def test_search_for_match_without_opponent(test_player_a, test_time_control):
+    """
+    In this test function "find_opponent" inside "search_for_match" function didn't find any opponent for the user
+    so we expect that function search_for_match returns game_created=False, our user MatchmakingEntry, game_id = None
+    user_opponent = None
+    """
+    game_created, user_matchmaking_entry, game_id, user_opponent = search_for_match(test_player_a, test_time_control)
+    assert game_created is False
+    assert user_matchmaking_entry is not None
+    assert game_id is None
+    assert user_opponent is None
+
+    # expect that user's MatchmakingEntry object still exist in database
+    assert MatchmakingEntry.objects.filter(user=test_player_a).exists()
