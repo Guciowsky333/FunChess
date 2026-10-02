@@ -52,7 +52,7 @@ def create_matchmaking_entry(user: CustomUser, time_control: TimeControl) -> Mat
 def finding_opponent(
     user_matchmaking_entry: MatchmakingEntry,
     time_control: TimeControl,
-    tolerance: int = 150,
+    tolerance: None | int = 150,
 ) -> MatchmakingEntry | None:
     """
     Finds the best available opponent for a user searching for a match at a given time control.
@@ -61,21 +61,26 @@ def finding_opponent(
     whose rating differs from the user's rating by at most `tolerance` in either direction.
     Returns the candidate with the closest rating (an exact match is returned immediately);
     returns None if no candidate falls within the tolerance.
+
+    If tolerance is None taking all MatchmakingEntry objects at provided time_control regardless of ratings
     """
 
     # Taking all possible user's opponents with ratings with a rating higher by a maximum of 150 or less by a maximum of 150
-    possible_opponents = list(
+    queryset = (
         MatchmakingEntry.objects.select_for_update()
-        .filter(
-            time_control=time_control,
-            rating__gte=user_matchmaking_entry.rating - tolerance,
-            rating__lte=user_matchmaking_entry.rating + tolerance,
-        )
+        .filter(time_control=time_control)
         .exclude(user=user_matchmaking_entry.user)
     )
 
+    if tolerance is not None:
+        queryset = queryset.filter(
+            rating__gte=user_matchmaking_entry.rating - tolerance,
+            rating__lte=user_matchmaking_entry.rating + tolerance,
+        )
+    possible_opponents = list(queryset)
+
     # If currently there is no opponent for user returns None
-    if possible_opponents is None:
+    if not possible_opponents:
         return None
 
     # Selects the best candidate with the closet rating to the user

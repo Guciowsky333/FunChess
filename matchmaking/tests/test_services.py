@@ -76,7 +76,7 @@ def test_finding_opponent_returns_opponent_with_closet_rating(
         rating=991,
     )
 
-    best_opponent = finding_opponent(test_player_a_matchmaking_entry, test_time_control)
+    best_opponent = finding_opponent(test_player_a_matchmaking_entry, test_time_control, None)
     assert best_opponent == second_matchmaking_entry
 
 
@@ -104,8 +104,32 @@ def test_find_opponent_returns_none_when_no_entry_in_range(
         time_control=test_time_control,
         rating=test_player_a_matchmaking_entry.rating - 151,
     )
-    best_opponent = finding_opponent(test_player_a_matchmaking_entry, test_time_control)
+    best_opponent = finding_opponent(test_player_a_matchmaking_entry, test_time_control, tolerance=150)
     assert best_opponent is None
+
+
+@pytest.mark.parametrize(
+    "tolerance",
+    [
+        pytest.param(150, id="tolerance 150"),
+        pytest.param(None, id="tolerance None"),
+    ],
+)
+def test_find_opponent_tolerance(tolerance, test_player_a_matchmaking_entry, test_time_control, test_opponent):
+    """
+    In this test we manually create 1 MatchmakingEntry with test_time_control and with rating greater than our test_user rating
+    by 151 and expect that when we use tolerance=150 function should not find any opponent at that range but when tolerance is None
+    it means that function searching throughout all MatchmakingEntry objects regardless of ratings so expect that function should
+    find our created MatchmakingEntry object with rating greater than our test_user rating by 151.
+    """
+    opponent_matchmaking = MatchmakingEntry.objects.create(
+        user=test_opponent, time_control=test_time_control, rating=test_player_a_matchmaking_entry.rating + 151
+    )
+    best_candidate = finding_opponent(test_player_a_matchmaking_entry, test_time_control, tolerance=tolerance)
+    if tolerance is None:
+        assert best_candidate == opponent_matchmaking
+    else:
+        assert best_candidate is None
 
 
 def test_find_opponent_returns_none_when_nobody_else_is_finding_game(
