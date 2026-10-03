@@ -1,5 +1,6 @@
 import random
 
+from celery.result import AsyncResult
 from django.db import transaction
 from django.db.models import Q
 
@@ -207,6 +208,8 @@ def search_for_match(
         game_created = True
         user_opponent = user_opponent_matchmaking_entry.user
         # Removes user and his opponent MatchmakingEntry objects when the game has been created for them successfully
+        if user_opponent_matchmaking_entry.pending_task_id:
+            AsyncResult(user_opponent_matchmaking_entry.pending_task_id).revoke()
         user_opponent_matchmaking_entry.delete()
         user_matchmaking_entry.delete()
 

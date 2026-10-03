@@ -22,6 +22,7 @@ def find_opponent_with_large_range(
 
     Every next task is runs after 60s
     """
+    channel_layer = get_channel_layer()
     user_opponent = None
     with transaction.atomic():
         user_matchmaking_entry = (
@@ -48,8 +49,6 @@ def find_opponent_with_large_range(
 
     # Sends message to both players outside of transaction.atomic()
     if user_opponent:
-        channel_layer = get_channel_layer()
-
         async_to_sync(channel_layer.group_send)(
             f"matchmaking_user_{user.id}", {"type": "match_found", "content": {"game_id": game_id}}
         )
@@ -72,4 +71,9 @@ def find_opponent_with_large_range(
     )
     user_matchmaking_entry.pending_task_id = task.id
     user_matchmaking_entry.save()
+    async_to_sync(channel_layer.group_send)(
+        f"matchmaking_user_{user_matchmaking_entry.user.id}",
+        {"type": "searching", "content": {"searching": "Wait still find your opponent"}},
+    )
+
     return
