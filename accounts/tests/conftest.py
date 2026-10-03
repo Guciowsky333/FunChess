@@ -6,7 +6,6 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from PIL import Image
 
 from accounts.models import CustomUser, VerificationCode
-from config.celery import app
 
 
 @pytest.fixture(autouse=True)
@@ -14,12 +13,6 @@ def clear_throttle_cache():
     cache.clear()
     yield
     cache.clear()
-
-
-@pytest.fixture(autouse=True)
-def celery_eager():
-    app.conf.task_always_eager = True
-    app.conf.task_eager_propagates = True
 
 
 @pytest.fixture
