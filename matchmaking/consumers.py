@@ -27,8 +27,8 @@ class MatchMakingConsumer(AsyncWebsocketConsumer):
         await self.channel_layer.group_add(f"matchmaking_user_{user.id}", self.channel_name)
         await self.accept()
 
-    async def disconnect(self):
-        pass
+    async def disconnect(self, close_code):
+        await self.channel_layer.group_discard(f"matchmaking_user_{self.user.id}", self.channel_name)
 
     async def receive(self, text_data):
 
@@ -50,16 +50,19 @@ class MatchMakingConsumer(AsyncWebsocketConsumer):
         game_created, user_matchmaking_entry, game_id, user_opponent = await database_sync_to_async(search_for_match)(
             self.user, time_control
         )
+
         # If function find opponent and game has been created returns game_id to both players
         if game_created:
             # Sends message to user
             await self.channel_layer.group_send(
                 f"matchmaking_user_{self.user.id}", {"type": "match_found", "content": {"game_id": game_id}}
             )
+
             # Sends message to user's opponent
             await self.channel_layer.group_send(
-                f"matchmaking_user_{user_opponent}", {"type": "match_found", "content": {"game_id": game_id}}
+                f"matchmaking_user_{user_opponent.id}", {"type": "match_found", "content": {"game_id": game_id}}
             )
+
             return
 
         # Runs task after 60s with widnes tolerance=300
@@ -72,10 +75,19 @@ class MatchMakingConsumer(AsyncWebsocketConsumer):
         # Sets up task in user_matchmaking_entry
         await database_sync_to_async(_save_pending_task_id)(user_matchmaking_entry, task.id)
         await self.send(text_data=json.dumps({"searching": "Wait still searching for your opponent"}))
+
         return
 
     async def match_found(self, event):
-        await self.send(text_data=json.dumps(event["content"]))
+        await self.send(
+            text_data=json.dumps(
+                {
+                    "type": "match_found",
+                    **event["content"],
+                }
+            )
+        )
+        await self.close()
 
     async def searching(self, event):
         await self.send(text_data=json.dumps(event["content"]))
