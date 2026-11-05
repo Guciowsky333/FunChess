@@ -1,7 +1,7 @@
 import pytest
 
 from games.models import Game, UserRating
-from matchmaking.exceptions import InvalidBody, TimeControlNotExist
+from matchmaking.exceptions import AlreadySearching, InvalidBody, TimeControlNotExist
 from matchmaking.models import MatchmakingEntry
 from matchmaking.services import (
     create_game,
@@ -50,6 +50,22 @@ def test_create_matchmaking_entry(test_player_a, test_time_control):
     assert user_matchmaking.user == test_player_a
     assert user_matchmaking.time_control == test_time_control
     assert user_matchmaking.rating == 1000
+
+
+def test_duplicate_entry_raises_already_searching(test_player_a, test_time_control):
+    """
+    In this test test_player_a already has a MatchMakingEntry object so expect that function raise
+    AlreadySearching error
+    """
+    # Create MatchmakingEntry object for our user
+    MatchmakingEntry.objects.create(
+        user=test_player_a,
+        time_control=test_time_control,
+        rating=300,
+    )
+
+    with pytest.raises(AlreadySearching):
+        create_matchmaking_entry(test_player_a, test_time_control)
 
 
 # Tests for "finding_opponent" function

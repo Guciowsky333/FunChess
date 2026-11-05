@@ -3,7 +3,7 @@ import json
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
 
-from matchmaking.exceptions import InvalidBody, TimeControlNotExist
+from matchmaking.exceptions import AlreadySearching, InvalidBody, TimeControlNotExist
 from matchmaking.models import MatchmakingEntry
 from matchmaking.services import (
     delete_matchmaking_entry_after_disconnect,
@@ -51,15 +51,22 @@ class MatchMakingConsumer(AsyncWebsocketConsumer):
         except TimeControlNotExist:
             await self.send(text_data=json.dumps({"error": "Time control does not exist"}))
             return
-
-        (
-            game_created,
-            user_matchmaking_entry,
-            game_id,
-            user_opponent,
-            user_rating_changes,
-            opponent_rating_changes,
-        ) = await database_sync_to_async(search_for_match)(self.user, time_control)
+        try:
+            (
+                game_created,
+                user_matchmaking_entry,
+                game_id,
+                user_opponent,
+                user_rating_changes,
+                opponent_rating_changes,
+            ) = await database_sync_to_async(search_for_match)(self.user, time_control)
+        except AlreadySearching:
+            await self.send(
+                text_data=json.dumps(
+                    {"error": "Already searching you can not search two or more games at the same time"}
+                )
+            )
+            return
 
         # If function find opponent and game has been created returns game_id to both players
         if game_created:

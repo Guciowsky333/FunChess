@@ -1,13 +1,13 @@
 import random
 
 from celery.result import AsyncResult
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Q
 
 from accounts.models import CustomUser
 from games.models import Game, TimeControl, UserRating
 from games.services import calculate_elo_change
-from matchmaking.exceptions import InvalidBody, TimeControlNotExist
+from matchmaking.exceptions import AlreadySearching, InvalidBody, TimeControlNotExist
 from matchmaking.models import MatchmakingEntry
 
 
@@ -37,18 +37,22 @@ def validate_matchmaking_request(body: dict) -> TimeControl:
 
 def create_matchmaking_entry(user: CustomUser, time_control: TimeControl) -> MatchmakingEntry:
     """
-    Take user's rating at provided time_control and creates MatchMakingEntry for user
+    Take user's rating at provided time_control and creates MatchMakingEntry for user.
     """
+
     user_rating = UserRating.objects.get(
         user=user,
         category=time_control.category,
     ).rating
 
-    return MatchmakingEntry.objects.create(
-        user=user,
-        time_control=time_control,
-        rating=user_rating,
-    )
+    try:
+        return MatchmakingEntry.objects.create(
+            user=user,
+            time_control=time_control,
+            rating=user_rating,
+        )
+    except IntegrityError:
+        raise AlreadySearching
 
 
 def finding_opponent(

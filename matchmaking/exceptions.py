@@ -4,3 +4,7 @@ class InvalidBody(Exception):
 
 class TimeControlNotExist(Exception):
     pass
+
+
+class AlreadySearching(Exception):
+    pass
