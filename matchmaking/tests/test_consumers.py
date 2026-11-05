@@ -6,6 +6,7 @@ from channels.testing import WebsocketCommunicator
 
 from config.asgi import application
 from games.models import Game
+from matchmaking.models import MatchmakingEntry
 
 
 @pytest.mark.asyncio
@@ -65,7 +66,7 @@ async def test_two_players_find_game(
         headers=[(b"cookie", f"access_token={test_token_player_b}".encode())],
     )
 
-    connected_a, subprotocol_a = await player_a_communicator.connect()
+    await player_a_communicator.connect()
     await player_b_communicator.connect()
 
     # First user start finding game, so far without results
@@ -104,3 +105,64 @@ async def test_two_players_find_game(
 
     await player_a_communicator.disconnect()
     await player_b_communicator.disconnect()
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_player_disconnect_after_sending_time_control(
+    test_token_player_a, test_time_control, test_player_a, mocker
+):
+    """
+    In this test user sent message with time_control_id and our consumer didn't find opponent for user and the
+    user disconnected form the consumer we expect that consumer will correctly delete MatchmakingEntry object for our user
+    """
+
+    # Mocking find_opponent_with_large_range task
+    mock_task = mocker.patch("matchmaking.tasks.find_opponent_with_large_range.apply_async")
+    mock_task.return_value.id = "test-task-id"
+
+    communicator = WebsocketCommunicator(
+        application,
+        "/ws/matchmaking/",
+        headers=[(b"cookie", f"access_token={test_token_player_a}".encode())],
+    )
+
+    await communicator.connect()
+
+    # The user send message so consumer should create MatchmakingEntry for user
+    await communicator.send_to(text_data=json.dumps({"time_control_id": test_time_control.id}))
+    await communicator.receive_from()
+    assert await database_sync_to_async(lambda: MatchmakingEntry.objects.filter(user=test_player_a).exists())()
+
+    # Now when the user disconnected the consumer should delete his MatchmakingEntry
+    await communicator.disconnect()
+    assert not await database_sync_to_async(lambda: MatchmakingEntry.objects.filter(user=test_player_a).exists())()
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_player_disconnect_before_sending_time_control(
+    test_token_player_a, test_time_control, test_player_a, mocker
+):
+    """
+    In this test user connect to MatchMakingConsumer but without sending message with time_control_id
+    so the consumer should not create MatchmakingEntry object for our user
+    """
+
+    # Mocking find_opponent_with_large_range task
+    mock_task = mocker.patch("matchmaking.tasks.find_opponent_with_large_range.apply_async")
+    mock_task.return_value.id = "test-task-id"
+
+    communicator = WebsocketCommunicator(
+        application,
+        "/ws/matchmaking/",
+        headers=[(b"cookie", f"access_token={test_token_player_a}".encode())],
+    )
+
+    await communicator.connect()
+    # Consumer shouldn't create MatchmakingEntry because user didn't send time_control_id
+    assert not await database_sync_to_async(lambda: MatchmakingEntry.objects.filter(user=test_player_a).exists())()
+
+    # After disconnect user still shouldn't have a MatchmakingEntry object in db
+    await communicator.disconnect()
+    assert not await database_sync_to_async(lambda: MatchmakingEntry.objects.filter(user=test_player_a).exists())()

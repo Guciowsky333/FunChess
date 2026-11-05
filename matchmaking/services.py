@@ -260,3 +260,18 @@ def search_for_match(
         user_matchmaking_entry.delete()
 
         return game_created, None, game_id, user_opponent, user_rating_changes, opponent_rating_changes
+
+
+def delete_matchmaking_entry_after_disconnect(user: CustomUser):
+    """
+    This function is uses only when user disconnected from MatchMakingConsumer, it checks if user
+    still has MatchmakingEntry object and delete it and revoke last task
+    """
+
+    user_matchmaking_entry = MatchmakingEntry.objects.filter(user=user).first()
+    if user_matchmaking_entry:
+        if user_matchmaking_entry.pending_task_id:
+            AsyncResult(user_matchmaking_entry.pending_task_id).revoke()
+        user_matchmaking_entry.delete()
+
+    return

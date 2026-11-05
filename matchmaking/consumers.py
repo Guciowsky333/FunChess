@@ -5,7 +5,11 @@ from channels.generic.websocket import AsyncWebsocketConsumer
 
 from matchmaking.exceptions import InvalidBody, TimeControlNotExist
 from matchmaking.models import MatchmakingEntry
-from matchmaking.services import search_for_match, validate_matchmaking_request
+from matchmaking.services import (
+    delete_matchmaking_entry_after_disconnect,
+    search_for_match,
+    validate_matchmaking_request,
+)
 from matchmaking.tasks import find_opponent_with_large_range
 
 
@@ -28,6 +32,7 @@ class MatchMakingConsumer(AsyncWebsocketConsumer):
         await self.accept()
 
     async def disconnect(self, close_code):
+        await database_sync_to_async(delete_matchmaking_entry_after_disconnect)(self.user)
         await self.channel_layer.group_discard(f"matchmaking_user_{self.user.id}", self.channel_name)
 
     async def receive(self, text_data):
