@@ -7,7 +7,7 @@ from django.db.models import Q
 from accounts.models import CustomUser
 from games.models import Game, TimeControl, UserRating
 from games.services import calculate_elo_change
-from matchmaking.exceptions import AlreadySearching, InvalidBody, TimeControlNotExist
+from matchmaking.exceptions import AlreadySearching, InvalidBody, TimeControlNotExist, YouAlreadyHaveGameInProgress
 from matchmaking.models import MatchmakingEntry
 
 
@@ -38,7 +38,17 @@ def validate_matchmaking_request(body: dict) -> TimeControl:
 def create_matchmaking_entry(user: CustomUser, time_control: TimeControl) -> MatchmakingEntry:
     """
     Take user's rating at provided time_control and creates MatchMakingEntry for user.
+
+    Important: User can't have 2 or more MatchMakingEntry objects at once and user can't
+    have any game in status "WAITING" or "IN_PROGRESS" when function try to create MatchMakingEntry for him
     """
+
+    # Checks if user has any game in progress
+    if Game.objects.filter(
+        Q(white_player=user) | Q(black_player=user),
+        status__in=[Game.Status.WAITING, Game.Status.IN_PROGRESS],
+    ).exists():
+        raise YouAlreadyHaveGameInProgress
 
     user_rating = UserRating.objects.get(
         user=user,

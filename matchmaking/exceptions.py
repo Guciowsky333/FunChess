@@ -8,3 +8,7 @@ class TimeControlNotExist(Exception):
 
 class AlreadySearching(Exception):
     pass
+
+
+class YouAlreadyHaveGameInProgress(Exception):
+    pass

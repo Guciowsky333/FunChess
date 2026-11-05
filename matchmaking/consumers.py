@@ -3,7 +3,7 @@ import json
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
 
-from matchmaking.exceptions import AlreadySearching, InvalidBody, TimeControlNotExist
+from matchmaking.exceptions import AlreadySearching, InvalidBody, TimeControlNotExist, YouAlreadyHaveGameInProgress
 from matchmaking.models import MatchmakingEntry
 from matchmaking.services import (
     delete_matchmaking_entry_after_disconnect,
@@ -60,6 +60,13 @@ class MatchMakingConsumer(AsyncWebsocketConsumer):
                 user_rating_changes,
                 opponent_rating_changes,
             ) = await database_sync_to_async(search_for_match)(self.user, time_control)
+
+        except YouAlreadyHaveGameInProgress:
+            await self.send(
+                text_data=json.dumps({"error": "You already have a game in progress you can't search for another one"})
+            )
+            return
+
         except AlreadySearching:
             await self.send(
                 text_data=json.dumps(

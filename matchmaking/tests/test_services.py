@@ -1,7 +1,7 @@
 import pytest
 
 from games.models import Game, UserRating
-from matchmaking.exceptions import AlreadySearching, InvalidBody, TimeControlNotExist
+from matchmaking.exceptions import AlreadySearching, InvalidBody, TimeControlNotExist, YouAlreadyHaveGameInProgress
 from matchmaking.models import MatchmakingEntry
 from matchmaking.services import (
     create_game,
@@ -65,6 +65,22 @@ def test_duplicate_entry_raises_already_searching(test_player_a, test_time_contr
     )
 
     with pytest.raises(AlreadySearching):
+        create_matchmaking_entry(test_player_a, test_time_control)
+
+
+def test_user_already_has_game_in_progress(test_player_a, test_time_control, test_player_b):
+    """
+    In this test test_player_a already has a Game with status "IN_PROGRESS" so expect that function raise
+    YouAlreadyHaveGameInProgress
+    """
+    # Create a game with status "IN_PROGRESS"
+    Game.objects.create(
+        white_player=test_player_a,
+        black_player=test_player_b,
+        status=Game.Status.IN_PROGRESS,
+        time_control=test_time_control,
+    )
+    with pytest.raises(YouAlreadyHaveGameInProgress):
         create_matchmaking_entry(test_player_a, test_time_control)
 
 
