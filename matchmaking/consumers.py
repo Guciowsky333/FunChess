@@ -47,20 +47,27 @@ class MatchMakingConsumer(AsyncWebsocketConsumer):
             await self.send(text_data=json.dumps({"error": "Time control does not exist"}))
             return
 
-        game_created, user_matchmaking_entry, game_id, user_opponent = await database_sync_to_async(search_for_match)(
-            self.user, time_control
-        )
+        (
+            game_created,
+            user_matchmaking_entry,
+            game_id,
+            user_opponent,
+            user_rating_changes,
+            opponent_rating_changes,
+        ) = await database_sync_to_async(search_for_match)(self.user, time_control)
 
         # If function find opponent and game has been created returns game_id to both players
         if game_created:
             # Sends message to user
             await self.channel_layer.group_send(
-                f"matchmaking_user_{self.user.id}", {"type": "match_found", "content": {"game_id": game_id}}
+                f"matchmaking_user_{self.user.id}",
+                {"type": "match_found", "content": {"game_id": game_id, "rating_changes": user_rating_changes}},
             )
 
             # Sends message to user's opponent
             await self.channel_layer.group_send(
-                f"matchmaking_user_{user_opponent.id}", {"type": "match_found", "content": {"game_id": game_id}}
+                f"matchmaking_user_{user_opponent.id}",
+                {"type": "match_found", "content": {"game_id": game_id, "rating_changes": opponent_rating_changes}},
             )
 
             return

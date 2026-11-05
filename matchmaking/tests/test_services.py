@@ -231,17 +231,24 @@ def test_create_game_both_players_with_the_same_white_ratio(
 def test_search_for_match_find_opponent(test_player_a, test_opponent, test_time_control):
     """
     In this test function "find_opponent" found opponent for our user so we expect function search_for_match returns
-    game_created=True, our user MatchmakingEntry=None, game_id, user_opponent, and we expect that function removed both
-    MatchmakingEntry objects from database
+    game_created=True, our user MatchmakingEntry=None, game_id, user_opponent, user_rating_changes,
+    opponent_rating_changes, and we expect that function removed both MatchmakingEntry objects from database
     """
     # Create opponent MatchmakingEntry object
     MatchmakingEntry.objects.create(
         user=test_opponent,
         time_control=test_time_control,
         # test_player_a has 300 rating at our test_time_control
-        rating=350,
+        rating=300,
     )
-    game_created, user_matchmaking_entry, game_id, user_opponent = search_for_match(test_player_a, test_time_control)
+    game_created, user_matchmaking_entry, game_id, user_opponent, user_rating_changes, opponent_rating_changes = (
+        search_for_match(test_player_a, test_time_control)
+    )
+    # Both players have the same rating so expect that if game result is draw they will gain 0 points, win + 16 points, lose - 16 points
+    assert user_rating_changes["win"] == 16 and opponent_rating_changes["win"] == 16
+    assert user_rating_changes["draw"] == 0 and opponent_rating_changes["draw"] == 0
+    assert user_rating_changes["lose"] == -16 and opponent_rating_changes["lose"] == -16
+
     assert game_created
     assert user_matchmaking_entry is None
     assert game_id is not None
@@ -257,13 +264,17 @@ def test_search_for_match_without_opponent(test_player_a, test_time_control):
     """
     In this test function "find_opponent" inside "search_for_match" function didn't find any opponent for the user
     so we expect that function search_for_match returns game_created=False, our user MatchmakingEntry, game_id = None
-    user_opponent = None
+    user_opponent = None, user_rating_changes = None, opponent_rating_changes = None
     """
-    game_created, user_matchmaking_entry, game_id, user_opponent = search_for_match(test_player_a, test_time_control)
+    game_created, user_matchmaking_entry, game_id, user_opponent, user_rating_changes, opponent_rating_changes = (
+        search_for_match(test_player_a, test_time_control)
+    )
     assert game_created is False
     assert user_matchmaking_entry is not None
     assert game_id is None
     assert user_opponent is None
+    assert user_rating_changes is None
+    assert opponent_rating_changes is None
 
     # expect that user's MatchmakingEntry object still exist in database
     assert MatchmakingEntry.objects.filter(user=test_player_a).exists()

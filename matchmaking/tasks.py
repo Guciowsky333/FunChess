@@ -6,7 +6,7 @@ from django.db import transaction
 
 from games.models import TimeControl
 from matchmaking.models import MatchmakingEntry
-from matchmaking.services import create_game, finding_opponent
+from matchmaking.services import create_game, finding_opponent, show_ratings_changes
 
 
 @shared_task
@@ -37,6 +37,9 @@ def find_opponent_with_large_range(
         best_candidate = finding_opponent(user_matchmaking_entry, time_control, tolerance)
         # If task find the opponent for user
         if best_candidate:
+            # Calculates ratings changes after the game to show them for the players before the game has beed started
+            user_rating_changes, opponent_rating_changes = show_ratings_changes(user_matchmaking_entry, best_candidate)
+
             user_opponent = best_candidate.user
             user = user_matchmaking_entry.user
             game_id = create_game(user_opponent, user_matchmaking_entry.user, time_control)
@@ -50,11 +53,19 @@ def find_opponent_with_large_range(
     # Sends message to both players outside of transaction.atomic()
     if user_opponent:
         async_to_sync(channel_layer.group_send)(
-            f"matchmaking_user_{user.id}", {"type": "match_found", "content": {"game_id": game_id}}
+            f"matchmaking_user_{user.id}",
+            {
+                "type": "match_found",
+                "content": {"game_id": game_id, "rating_changes": user_rating_changes},
+            },
         )
 
         async_to_sync(channel_layer.group_send)(
-            f"matchmaking_user_{user_opponent.id}", {"type": "match_found", "content": {"game_id": game_id}}
+            f"matchmaking_user_{user_opponent.id}",
+            {
+                "type": "match_found",
+                "content": {"game_id": game_id, "rating_changes": opponent_rating_changes},
+            },
         )
         return
 

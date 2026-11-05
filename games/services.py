@@ -417,7 +417,7 @@ def update_pending_task_id(game: Game, task_id: str) -> None:
     game.save()
 
 
-def _calculate_elo_change(rating_a: int, rating_b: int, score_a: float, k: int = 32) -> int:
+def calculate_elo_change(rating_a: int, rating_b: int, score_a: float, k: int = 32) -> int:
     """
     rating_a/rating_b: current Elo of both players
     score_a: 1.0 win, 0.5 draw, 0.0 loss — from player A's perspective
@@ -429,7 +429,7 @@ def _calculate_elo_change(rating_a: int, rating_b: int, score_a: float, k: int =
 
 def change_players_ratings_after_game(game: Game) -> None:
     """
-    Uses '_calculate_elo_change' function to calculate rating that players should get after game is finished based on
+    Uses 'calculate_elo_change' function to calculate rating that players should get after game is finished based on
     game result and players ratings, and updates rating of both players by that numbers.
     """
 
@@ -451,8 +451,8 @@ def change_players_ratings_after_game(game: Game) -> None:
     white_rating = UserRating.objects.get(user=game.white_player, category=game_type)
     black_rating = UserRating.objects.get(user=game.black_player, category=game_type)
 
-    white_change = _calculate_elo_change(white_rating.rating, black_rating.rating, score_a)
-    black_change = _calculate_elo_change(black_rating.rating, white_rating.rating, (1.0 - score_a))
+    white_change = calculate_elo_change(white_rating.rating, black_rating.rating, score_a)
+    black_change = calculate_elo_change(black_rating.rating, white_rating.rating, (1.0 - score_a))
 
     white_rating.rating += white_change
     black_rating.rating += black_change

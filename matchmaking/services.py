@@ -6,6 +6,7 @@ from django.db.models import Q
 
 from accounts.models import CustomUser
 from games.models import Game, TimeControl, UserRating
+from games.services import calculate_elo_change
 from matchmaking.exceptions import InvalidBody, TimeControlNotExist
 from matchmaking.models import MatchmakingEntry
 
@@ -181,9 +182,45 @@ def create_game(player_a: CustomUser, player_b: CustomUser, time_control: TimeCo
     return game.id
 
 
+RatingChanges = dict[str, int]
+
+
+def show_ratings_changes(
+    user_matchmaking_entry: MatchmakingEntry, opponent_matchmaking_entry: MatchmakingEntry
+) -> tuple[RatingChanges, RatingChanges]:
+    """
+    Returns 2 dict, one contain how many rating points our user will lose or gain depends on the game result, and second one contain
+    how many rating points user's opponent will lose or gain depends on the game result.
+
+    Uses calculate_elo_change function that
+    """
+    user_rating = user_matchmaking_entry.rating
+    opponent_rating = opponent_matchmaking_entry.rating
+
+    user_rating_changes = {
+        # 1 means user won the game
+        "win": calculate_elo_change(user_rating, opponent_rating, 1),
+        # 0.5 means user drew the game
+        "draw": calculate_elo_change(user_rating, opponent_rating, 0.5),
+        # 0 means user lost the game
+        "lose": calculate_elo_change(user_rating, opponent_rating, 0),
+    }
+
+    opponent_rating_changes = {
+        # 1 means opponent won the game
+        "win": calculate_elo_change(opponent_rating, user_rating, 1),
+        # 0.5 means opponent drew the game
+        "draw": calculate_elo_change(opponent_rating, user_rating, 0.5),
+        # 0 means opponent lost the game
+        "lose": calculate_elo_change(opponent_rating, user_rating, 0),
+    }
+
+    return user_rating_changes, opponent_rating_changes
+
+
 def search_for_match(
     user: CustomUser, time_control: TimeControl
-) -> tuple[bool, MatchmakingEntry | None, None | int, None | CustomUser]:
+) -> tuple[bool, MatchmakingEntry | None, None | int, None | CustomUser, dict | None, dict | None]:
     """
     This function combines 'create_matchmaking_entry', 'finding_opponent' and 'create_game' and wraps them
     in transaction.atomic to roll back all of them if something goes wrong.
@@ -193,16 +230,25 @@ def search_for_match(
     If True, finding_opponent found the user's opponent and create_game created the game, so the function returns
     game_id and the opponent's CustomUser to send a message about the found game to the user's opponent.
 
-    Important: the returned tuple always has length 4, in the same order:
-    (game_created, MatchmakingEntry object for user, game_id, CustomUser object for user's opponent) — even when
+    Important: the returned tuple always has length 6, in the same order:
+    (game_created, MatchmakingEntry object for user, game_id, CustomUser object for user's opponent,
+    user_rating_changes if game has been created, opponent_rating_changes if game has been created) — even when
     some of those fields aren't relevant for the given outcome, they are filled in as None.
+
+    Function also uses _show_ratings_changes to show how many rating points
+    players will gain or lose depending on the game result but only when found opponent and created a game.
     """
     with transaction.atomic():
         user_matchmaking_entry = create_matchmaking_entry(user, time_control)
         user_opponent_matchmaking_entry = finding_opponent(user_matchmaking_entry, time_control, tolerance=150)
         if user_opponent_matchmaking_entry is None:
             game_created = False
-            return game_created, user_matchmaking_entry, None, None
+            return game_created, user_matchmaking_entry, None, None, None, None
+
+        # Calculates ratings changes after the game to show them for the players before the game has beed started
+        user_rating_changes, opponent_rating_changes = show_ratings_changes(
+            user_matchmaking_entry, user_opponent_matchmaking_entry
+        )
 
         game_id = create_game(user_matchmaking_entry.user, user_opponent_matchmaking_entry.user, time_control)
         game_created = True
@@ -213,4 +259,4 @@ def search_for_match(
         user_opponent_matchmaking_entry.delete()
         user_matchmaking_entry.delete()
 
-        return game_created, None, game_id, user_opponent
+        return game_created, None, game_id, user_opponent, user_rating_changes, opponent_rating_changes
