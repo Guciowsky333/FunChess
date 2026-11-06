@@ -49,6 +49,7 @@ class Game(models.Model):
         WAITING = "waiting", "Waiting"
         IN_PROGRESS = "in_progress", "In Progress"
         FINISHED = "finished", "Finished"
+        ABANDONED = "abandoned", "Abandoned"
 
     class DrawOfferedBy(models.TextChoices):
         WHITE = "white", "White"
