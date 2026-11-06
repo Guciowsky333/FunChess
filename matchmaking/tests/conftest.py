@@ -5,8 +5,17 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from accounts.models import CustomUser
 from config.asgi import application
-from games.models import TimeControl
+from games.models import Game, TimeControl
 from matchmaking.models import MatchmakingEntry
+
+
+@pytest.fixture
+def test_game(db, test_player_a, test_player_b, test_time_control):
+    return Game.objects.create(
+        white_player=test_player_a,
+        black_player=test_player_b,
+        time_control=test_time_control,
+    )
 
 
 @pytest.fixture

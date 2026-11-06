@@ -4,7 +4,7 @@ from celery.result import AsyncResult
 from channels.layers import get_channel_layer
 from django.db import transaction
 
-from games.models import TimeControl
+from games.models import Game, TimeControl
 from matchmaking.models import MatchmakingEntry
 from matchmaking.services import create_game, finding_opponent, show_ratings_changes
 
@@ -88,3 +88,35 @@ def find_opponent_with_large_range(
     )
 
     return
+
+
+@shared_task
+def abandon_game_if_not_started(game_id: int):
+    """
+    This task check if players connected to the game and the game hase been started.
+
+    When MatchMakingConsumer find opponent and create a game both players have 30s to connect to the game
+    if any of them don't do it the game is finished with result "ABANDONED"
+    """
+    channel_layer = get_channel_layer()
+    with transaction.atomic():
+        game = Game.objects.get(id=game_id)
+
+        # If the game still have "WAITING" status it means that some player or both didn't connect to the game
+        if game.status == Game.Status.WAITING:
+            game.status = Game.Status.FINISHED
+            game.result = Game.Result.ABANDONED
+            game.save()
+
+            # Checking who didn't connect to the game and send message to players
+            not_connected = []
+            if not game.white_connected:
+                not_connected.append("white")
+            if not game.black_connected:
+                not_connected.append("black")
+
+            async_to_sync(channel_layer.group_send)(
+                f"game_{game.id}",
+                {"type": "game_ended", "content": {"result": game.result, "not_connected_players": not_connected}},
+            )
+        return

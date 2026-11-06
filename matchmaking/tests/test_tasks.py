@@ -5,9 +5,10 @@ from django.db.models import Q
 
 from games.models import Game
 from matchmaking.models import MatchmakingEntry
-from matchmaking.tasks import find_opponent_with_large_range
+from matchmaking.tasks import abandon_game_if_not_started, find_opponent_with_large_range
 
 
+# Tests for 'find_opponent_with_large_range' task
 @pytest.mark.django_db(transaction=True)
 def test_find_opponent_with_large_range_not_find_opponent(
     test_player_a_matchmaking_entry, test_time_control, test_opponent
@@ -93,3 +94,31 @@ def test_find_opponent_with_large_range_third_attempt(
     # Expect that task deleted both MatchmakingEntry objects for user and his opponent
     assert not MatchmakingEntry.objects.filter(pk=opponent_matchmaking_entry.id).exists()
     assert not MatchmakingEntry.objects.filter(pk=test_player_a_matchmaking_entry.id).exists()
+
+
+# Tests for 'abandon_game_if_not_started' task
+@pytest.mark.parametrize(
+    "game_status",
+    [
+        pytest.param("waiting", id="status_waiting"),
+        pytest.param("in_progress", id="status_in_progress"),
+        pytest.param("finished", id="status_finished"),
+    ],
+)
+def test_abandon_game_if_not_started_all_statuses(game_status, test_game):
+    """
+    If game have status "waiting" our task should finish the game with result "ABANDONED"
+    otherwise shouldn't do anything.
+    """
+    test_game.status = game_status
+    test_game.save()
+    abandon_game_if_not_started(test_game.id)
+    test_game.refresh_from_db()
+
+    if game_status == "waiting":
+        assert test_game.status == Game.Status.FINISHED
+        assert test_game.result == Game.Result.ABANDONED
+    # If status is other than "WAITING" game result and status should be the same
+    else:
+        assert test_game.status == game_status
+        assert not test_game.result
