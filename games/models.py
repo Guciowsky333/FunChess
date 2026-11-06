@@ -74,8 +74,8 @@ class Game(models.Model):
 
     reason = models.CharField(choices=Reason.choices, max_length=21, blank=True, null=True)
 
-    white_connected = models.BooleanField(default=False)
-    black_connected = models.BooleanField(default=False)
+    white_joined = models.BooleanField(default=False)
+    black_joined = models.BooleanField(default=False)
 
     white_player = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="games_as_white")
     black_player = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="games_as_black")

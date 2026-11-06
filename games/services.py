@@ -42,16 +42,16 @@ def connect_player_to_game(game_id: int, user: CustomUser):
     if game.status == Game.Status.FINISHED:
         raise TheGameIsFinished
     if game.white_player == user:
-        game.white_connected = True
+        game.white_joined = True
 
     elif game.black_player == user:
-        game.black_connected = True
+        game.black_joined = True
 
     else:
         raise PlayerDoesNotBelongToGameError
 
     # Changes game status to IN_PROGRESS only if current game status is WAITING
-    if game.white_connected and game.black_connected and game.status == Game.Status.WAITING:
+    if game.white_joined and game.black_joined and game.status == Game.Status.WAITING:
         game.status = Game.Status.IN_PROGRESS
         game.current_turn_started_at = timezone.now()
         # call task than start count white time

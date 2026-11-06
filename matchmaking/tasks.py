@@ -110,9 +110,9 @@ def abandon_game_if_not_started(game_id: int):
 
             # Checking who didn't connect to the game and send message to players
             not_connected = []
-            if not game.white_connected:
+            if not game.white_joined:
                 not_connected.append("white")
-            if not game.black_connected:
+            if not game.black_joined:
                 not_connected.append("black")
 
             async_to_sync(channel_layer.group_send)(
