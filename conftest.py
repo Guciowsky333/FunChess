@@ -1,6 +1,13 @@
 import pytest
 
 from accounts.models import CustomUser
+from config.celery import app
+
+
+@pytest.fixture(autouse=True)
+def celery_eager():
+    app.conf.task_always_eager = True
+    app.conf.task_eager_propagates = True
 
 
 @pytest.fixture

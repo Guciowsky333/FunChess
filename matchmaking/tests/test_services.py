@@ -1,0 +1,312 @@
+import pytest
+
+from games.models import Game, UserRating
+from matchmaking.exceptions import AlreadySearching, InvalidBody, TimeControlNotExist, YouAlreadyHaveGameInProgress
+from matchmaking.models import MatchmakingEntry
+from matchmaking.services import (
+    create_game,
+    create_matchmaking_entry,
+    finding_opponent,
+    search_for_match,
+    validate_matchmaking_request,
+)
+
+
+# Tests for "validate_matchmaking_request" function
+def test_validate_matchmaking(test_time_control):
+    body = {
+        "time_control_id": test_time_control.id,
+    }
+    time_control = validate_matchmaking_request(body)
+    assert time_control == test_time_control
+
+
+@pytest.mark.parametrize(
+    "body, expected_error",
+    [
+        pytest.param({"test": "test"}, InvalidBody, id="Body without time_control_id"),
+        pytest.param({"time_control_id": ""}, InvalidBody, id="Body with empty time_control_id"),
+        pytest.param({"time_control_id": "string"}, InvalidBody, id="time_control_id is not int"),
+        pytest.param({"time_control_id": 5}, TimeControlNotExist, id="time_control_id with provided id not exists"),
+    ],
+)
+@pytest.mark.django_db
+def test_validate_matchmaking_request_invalid_body(body, expected_error):
+    with pytest.raises(expected_error):
+        validate_matchmaking_request(body)
+
+
+# Tests for "create_matchmaking_entry" function
+def test_create_matchmaking_entry(test_player_a, test_time_control):
+    """
+    In this test we set up test_player_a rating at test_time_control as 1000 and expect
+    that our function will correctly create MatchMakingEntry for user
+    """
+    test_player_a_rating = UserRating.objects.get(user=test_player_a, category=test_time_control.category)
+    test_player_a_rating.rating = 1000
+    test_player_a_rating.save()
+
+    user_matchmaking = create_matchmaking_entry(test_player_a, test_time_control)
+    assert user_matchmaking.user == test_player_a
+    assert user_matchmaking.time_control == test_time_control
+    assert user_matchmaking.rating == 1000
+
+
+def test_duplicate_entry_raises_already_searching(test_player_a, test_time_control):
+    """
+    In this test test_player_a already has a MatchMakingEntry object so expect that function raise
+    AlreadySearching error
+    """
+    # Create MatchmakingEntry object for our user
+    MatchmakingEntry.objects.create(
+        user=test_player_a,
+        time_control=test_time_control,
+        rating=300,
+    )
+
+    with pytest.raises(AlreadySearching):
+        create_matchmaking_entry(test_player_a, test_time_control)
+
+
+def test_user_already_has_game_in_progress(test_player_a, test_time_control, test_player_b):
+    """
+    In this test test_player_a already has a Game with status "IN_PROGRESS" so expect that function raise
+    YouAlreadyHaveGameInProgress
+    """
+    # Create a game with status "IN_PROGRESS"
+    Game.objects.create(
+        white_player=test_player_a,
+        black_player=test_player_b,
+        status=Game.Status.IN_PROGRESS,
+        time_control=test_time_control,
+    )
+    with pytest.raises(YouAlreadyHaveGameInProgress):
+        create_matchmaking_entry(test_player_a, test_time_control)
+
+
+# Tests for "finding_opponent" function
+def test_finding_opponent_returns_opponent_with_closet_rating(
+    test_player_a_matchmaking_entry, test_time_control, test_player_b, test_opponent
+):
+    """
+    test_player_a_matchmaking_entry has rating 1000
+
+    In this test we manually create 2 MatchmakingEntry with test_time_control
+    one with 1010 so diff between user's rating is 10 and second with rating 991 so diff between user's rating is 9,
+    and we expect that our function return second MatchmakingEntry object with 991 rating.
+    """
+
+    MatchmakingEntry.objects.create(
+        user=test_player_b,
+        time_control=test_time_control,
+        rating=1010,
+    )
+
+    second_matchmaking_entry = MatchmakingEntry.objects.create(
+        user=test_opponent,
+        time_control=test_time_control,
+        rating=991,
+    )
+
+    best_opponent = finding_opponent(test_player_a_matchmaking_entry, test_time_control, None)
+    assert best_opponent == second_matchmaking_entry
+
+
+def test_find_opponent_returns_none_when_no_entry_in_range(
+    test_player_a_matchmaking_entry, test_time_control, test_player_b, test_opponent
+):
+    """
+    Function "find_opponent" takes into accounts only players with maximum 150 ratings more that current user or maximum 150 less rating
+    than current user.
+
+    In this test we manually create 2 MatchmakingEntry with test_time_control but this time the first one will be
+    with too higher rating more than user's rating by 151 and second one will be with too low rating less than user's rating by 151.
+    Expect that function doesn't find any opponent and return "None"
+    """
+
+    # MatchmakingEntry higher by 151 points than test_player_a rating
+    MatchmakingEntry.objects.create(
+        user=test_player_b,
+        time_control=test_time_control,
+        rating=test_player_a_matchmaking_entry.rating + 151,
+    )
+    # MatchmakingEntry lower by 151 points than test_player_a rating
+    MatchmakingEntry.objects.create(
+        user=test_opponent,
+        time_control=test_time_control,
+        rating=test_player_a_matchmaking_entry.rating - 151,
+    )
+    best_opponent = finding_opponent(test_player_a_matchmaking_entry, test_time_control, tolerance=150)
+    assert best_opponent is None
+
+
+@pytest.mark.parametrize(
+    "tolerance",
+    [
+        pytest.param(150, id="tolerance 150"),
+        pytest.param(None, id="tolerance None"),
+    ],
+)
+def test_find_opponent_tolerance(tolerance, test_player_a_matchmaking_entry, test_time_control, test_opponent):
+    """
+    In this test we manually create 1 MatchmakingEntry with test_time_control and with rating greater than our test_user rating
+    by 151 and expect that when we use tolerance=150 function should not find any opponent at that range but when tolerance is None
+    it means that function searching throughout all MatchmakingEntry objects regardless of ratings so expect that function should
+    find our created MatchmakingEntry object with rating greater than our test_user rating by 151.
+    """
+    opponent_matchmaking = MatchmakingEntry.objects.create(
+        user=test_opponent, time_control=test_time_control, rating=test_player_a_matchmaking_entry.rating + 151
+    )
+    best_candidate = finding_opponent(test_player_a_matchmaking_entry, test_time_control, tolerance=tolerance)
+    if tolerance is None:
+        assert best_candidate == opponent_matchmaking
+    else:
+        assert best_candidate is None
+
+
+def test_find_opponent_returns_none_when_nobody_else_is_finding_game(
+    test_player_a_matchmaking_entry, test_time_control
+):
+    """
+    In this test there is only one MatchmakingEntry with test_time_control "test_player_a_matchmaking_entry" so expect
+    that for test_player_a function will return "None" because nobody elso is finding game right now.
+    """
+    best_opponent = finding_opponent(test_player_a_matchmaking_entry, test_time_control)
+    assert best_opponent is None
+
+
+# Tests for "create_game" function
+def test_create_game_player_a_with_higher_ratio_as_white(
+    test_player_a, test_player_b, test_opponent, test_time_control
+):
+    """
+    Player A has 2 previous games at this time control (1 as white, 1 as black) -> white ratio 0.5.
+    Player B has only 1 previous game, as white -> white ratio 1.0.
+
+    Since both players have fewer than 10 games, all of their existing games are used for the ratio
+    calculation. Player B's white ratio (1.0) is higher than player A's (0.5), meaning B has played
+    white proportionally more often, so B should be assigned black to balance their color history.
+    We expect the function will correctly create new game where player A will be assigned as white and
+    player B will be assigned as black.
+    """
+
+    # Player A's games
+    Game.objects.create(
+        white_player=test_player_a,
+        black_player=test_opponent,
+        time_control=test_time_control,
+        status=Game.Status.FINISHED,
+    )
+    Game.objects.create(
+        white_player=test_opponent,
+        black_player=test_player_a,
+        time_control=test_time_control,
+        status=Game.Status.FINISHED,
+    )
+
+    # Player B's game
+    Game.objects.create(
+        white_player=test_player_b,
+        black_player=test_opponent,
+        time_control=test_time_control,
+        status=Game.Status.FINISHED,
+    )
+
+    game_id = create_game(test_player_a, test_player_b, test_time_control)
+    new_game = Game.objects.get(pk=game_id)
+    assert new_game.time_control == test_time_control
+    assert new_game.white_player == test_player_a
+    assert new_game.black_player == test_player_b
+
+
+def test_create_game_player_a_without_any_game(test_player_a, test_player_b, test_opponent, test_time_control):
+    """
+    Player A has never played any game at this time control in this case his ratio is 0.5
+    because he has never played any game as white and as black.
+    Player B has only 1 previous game, as white -> white ratio 1.0.
+
+    We expect that player A will be assigned as white because he has fewer white ratio (0.5)
+    and player B will be assigned as black because he has higher white ratio (1.0) than player A.
+    """
+
+    Game.objects.create(
+        white_player=test_player_b,
+        black_player=test_opponent,
+        time_control=test_time_control,
+        status=Game.Status.FINISHED,
+    )
+    create_game(test_player_a, test_player_b, test_time_control)
+    game_id = create_game(test_player_a, test_player_b, test_time_control)
+    new_game = Game.objects.get(pk=game_id)
+    assert new_game.time_control == test_time_control
+    assert new_game.white_player == test_player_a
+    assert new_game.black_player == test_player_b
+
+
+def test_create_game_both_players_with_the_same_white_ratio(
+    test_player_a, test_player_b, test_opponent, test_time_control
+):
+    """
+    In this test both players have never played any game at this time control so they both have white ratio 0.5 and in
+    this case when both players have exactly the same white ratio we expect that the function will choose randomly who will
+    be played as white and as black.
+    """
+    game_id = create_game(test_player_a, test_player_b, test_time_control)
+    new_game = Game.objects.get(pk=game_id)
+    assert new_game.time_control == test_time_control
+
+    assert new_game.white_player == test_player_a or test_player_b
+    assert new_game.black_player == test_player_a if new_game.white_player == test_player_b else test_player_b
+
+
+# Tests for "search_for_match" function
+def test_search_for_match_find_opponent(test_player_a, test_opponent, test_time_control):
+    """
+    In this test function "find_opponent" found opponent for our user so we expect function search_for_match returns
+    game_created=True, our user MatchmakingEntry=None, game_id, user_opponent, user_rating_changes,
+    opponent_rating_changes, and we expect that function removed both MatchmakingEntry objects from database
+    """
+    # Create opponent MatchmakingEntry object
+    MatchmakingEntry.objects.create(
+        user=test_opponent,
+        time_control=test_time_control,
+        # test_player_a has 300 rating at our test_time_control
+        rating=300,
+    )
+    game_created, user_matchmaking_entry, game_id, user_opponent, user_rating_changes, opponent_rating_changes = (
+        search_for_match(test_player_a, test_time_control)
+    )
+    # Both players have the same rating so expect that if game result is draw they will gain 0 points, win + 16 points, lose - 16 points
+    assert user_rating_changes["win"] == 16 and opponent_rating_changes["win"] == 16
+    assert user_rating_changes["draw"] == 0 and opponent_rating_changes["draw"] == 0
+    assert user_rating_changes["lose"] == -16 and opponent_rating_changes["lose"] == -16
+
+    assert game_created
+    assert user_matchmaking_entry is None
+    assert game_id is not None
+    assert user_opponent == test_opponent
+
+    assert Game.objects.filter(pk=game_id).exists()
+    # Checking if function correctly removed MatchmakingEntry for both players
+    assert not MatchmakingEntry.objects.filter(user=test_player_a).exists()
+    assert not MatchmakingEntry.objects.filter(user=test_opponent).exists()
+
+
+def test_search_for_match_without_opponent(test_player_a, test_time_control):
+    """
+    In this test function "find_opponent" inside "search_for_match" function didn't find any opponent for the user
+    so we expect that function search_for_match returns game_created=False, our user MatchmakingEntry, game_id = None
+    user_opponent = None, user_rating_changes = None, opponent_rating_changes = None
+    """
+    game_created, user_matchmaking_entry, game_id, user_opponent, user_rating_changes, opponent_rating_changes = (
+        search_for_match(test_player_a, test_time_control)
+    )
+    assert game_created is False
+    assert user_matchmaking_entry is not None
+    assert game_id is None
+    assert user_opponent is None
+    assert user_rating_changes is None
+    assert opponent_rating_changes is None
+
+    # expect that user's MatchmakingEntry object still exist in database
+    assert MatchmakingEntry.objects.filter(user=test_player_a).exists()

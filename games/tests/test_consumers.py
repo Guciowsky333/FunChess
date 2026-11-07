@@ -23,7 +23,7 @@ async def test_connect_as_white_player(test_game_status_waiting, access_token_wh
     assert communicator.scope["user"] == test_game_status_waiting.white_player
     assert connected
     await database_sync_to_async(test_game_status_waiting.refresh_from_db)()
-    assert test_game_status_waiting.white_connected
+    assert test_game_status_waiting.white_joined
     await communicator.disconnect()
 
 
@@ -40,7 +40,7 @@ async def test_connect_as_black_player(test_game_status_waiting, access_token_bl
     assert communicator.scope["user"] == test_game_status_waiting.black_player
     assert connected
     await database_sync_to_async(test_game_status_waiting.refresh_from_db)()
-    assert test_game_status_waiting.black_connected
+    assert test_game_status_waiting.black_joined
     await communicator.disconnect()
 
 
@@ -88,7 +88,7 @@ async def test_connect_both_players(test_game_status_waiting, access_token_black
     and expect that when black player will connect status and current_turn_started_at
     will change at provided game
     """
-    test_game_status_waiting.white_connected = True
+    test_game_status_waiting.white_joined = True
     await database_sync_to_async(test_game_status_waiting.save)()
     communicator = WebsocketCommunicator(
         application,
@@ -99,7 +99,7 @@ async def test_connect_both_players(test_game_status_waiting, access_token_black
     assert communicator.scope["user"] == test_game_status_waiting.black_player
     assert connected
     await database_sync_to_async(test_game_status_waiting.refresh_from_db)()
-    assert test_game_status_waiting.black_connected
+    assert test_game_status_waiting.black_joined
     assert test_game_status_waiting.status == Game.Status.IN_PROGRESS
     assert test_game_status_waiting.current_turn_started_at is not None
 

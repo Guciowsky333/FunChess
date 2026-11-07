@@ -3,7 +3,7 @@ from channels.db import database_sync_to_async
 from django.contrib.auth.models import AnonymousUser
 
 from accounts.models import CustomUser
-from games.middlewares import JWTAuthMiddleware
+from config.middlewares import JWTAuthMiddleware
 
 
 @pytest.mark.asyncio

@@ -34,34 +34,39 @@ def connect_player_to_game(game_id: int, user: CustomUser):
     changes the game status to IN_PROGRESS and sets
     "current_turn_started_at" to the current time.
     """
-    try:
-        game = Game.objects.select_related("white_player", "black_player").get(id=game_id)
-    except Game.DoesNotExist:
-        raise GameDoesNotExist
+    with transaction.atomic():
+        try:
+            game = (
+                Game.objects.select_for_update(of=("self",))
+                .select_related("white_player", "black_player")
+                .get(id=game_id)
+            )
+        except Game.DoesNotExist:
+            raise GameDoesNotExist
 
-    if game.status == Game.Status.FINISHED:
-        raise TheGameIsFinished
-    if game.white_player == user:
-        game.white_connected = True
+        if game.status == Game.Status.FINISHED:
+            raise TheGameIsFinished
+        if game.white_player == user:
+            game.white_joined = True
 
-    elif game.black_player == user:
-        game.black_connected = True
+        elif game.black_player == user:
+            game.black_joined = True
 
-    else:
-        raise PlayerDoesNotBelongToGameError
+        else:
+            raise PlayerDoesNotBelongToGameError
 
-    # Changes game status to IN_PROGRESS only if current game status is WAITING
-    if game.white_connected and game.black_connected and game.status == Game.Status.WAITING:
-        game.status = Game.Status.IN_PROGRESS
-        game.current_turn_started_at = timezone.now()
-        # call task than start count white time
-        task = check_opponent_time.apply_async(
-            args=[game_id, 0],
-            countdown=game.white_time_remaining,
-        )
-        game.pending_timeout_task_id = task.id
+        # Changes game status to IN_PROGRESS only if current game status is WAITING
+        if game.white_joined and game.black_joined and game.status == Game.Status.WAITING:
+            game.status = Game.Status.IN_PROGRESS
+            game.current_turn_started_at = timezone.now()
+            # call task than start count white time
+            task = check_opponent_time.apply_async(
+                args=[game_id, 0],
+                countdown=game.white_time_remaining,
+            )
+            game.pending_timeout_task_id = task.id
 
-    game.save()
+        game.save()
 
 
 # Functions use in consumers.py receive
@@ -417,7 +422,7 @@ def update_pending_task_id(game: Game, task_id: str) -> None:
     game.save()
 
 
-def _calculate_elo_change(rating_a: int, rating_b: int, score_a: float, k: int = 32) -> int:
+def calculate_elo_change(rating_a: int, rating_b: int, score_a: float, k: int = 32) -> int:
     """
     rating_a/rating_b: current Elo of both players
     score_a: 1.0 win, 0.5 draw, 0.0 loss — from player A's perspective
@@ -429,7 +434,7 @@ def _calculate_elo_change(rating_a: int, rating_b: int, score_a: float, k: int =
 
 def change_players_ratings_after_game(game: Game) -> None:
     """
-    Uses '_calculate_elo_change' function to calculate rating that players should get after game is finished based on
+    Uses 'calculate_elo_change' function to calculate rating that players should get after game is finished based on
     game result and players ratings, and updates rating of both players by that numbers.
     """
 
@@ -451,8 +456,8 @@ def change_players_ratings_after_game(game: Game) -> None:
     white_rating = UserRating.objects.get(user=game.white_player, category=game_type)
     black_rating = UserRating.objects.get(user=game.black_player, category=game_type)
 
-    white_change = _calculate_elo_change(white_rating.rating, black_rating.rating, score_a)
-    black_change = _calculate_elo_change(black_rating.rating, white_rating.rating, (1.0 - score_a))
+    white_change = calculate_elo_change(white_rating.rating, black_rating.rating, score_a)
+    black_change = calculate_elo_change(black_rating.rating, white_rating.rating, (1.0 - score_a))
 
     white_rating.rating += white_change
     black_rating.rating += black_change

@@ -5,7 +5,7 @@ from games.models import Game, Move, TimeControl, UserRating
 
 @admin.register(TimeControl)
 class TimeControlAdmin(admin.ModelAdmin):
-    list_display = ["category", "initial_time_seconds", "increment_seconds"]
+    list_display = ["id", "category", "initial_time_seconds", "increment_seconds"]
 
 
 @admin.register(Game)
