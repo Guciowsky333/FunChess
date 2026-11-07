@@ -10,7 +10,7 @@ from matchmaking.services import (
     search_for_match,
     validate_matchmaking_request,
 )
-from matchmaking.tasks import find_opponent_with_large_range
+from matchmaking.tasks import abandon_game_if_not_started, find_opponent_with_large_range
 
 
 def _save_pending_task_id(matchmaking_entry: MatchmakingEntry, task_id: str):
@@ -87,6 +87,12 @@ class MatchMakingConsumer(AsyncWebsocketConsumer):
             await self.channel_layer.group_send(
                 f"matchmaking_user_{user_opponent.id}",
                 {"type": "match_found", "content": {"game_id": game_id, "rating_changes": opponent_rating_changes}},
+            )
+
+            # Runs task that will check if both players connected to the game during 30 s
+            await database_sync_to_async(abandon_game_if_not_started.apply_async)(
+                args=[game_id],
+                countdown=30,
             )
 
             return
