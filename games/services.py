@@ -34,34 +34,39 @@ def connect_player_to_game(game_id: int, user: CustomUser):
     changes the game status to IN_PROGRESS and sets
     "current_turn_started_at" to the current time.
     """
-    try:
-        game = Game.objects.select_related("white_player", "black_player").get(id=game_id)
-    except Game.DoesNotExist:
-        raise GameDoesNotExist
+    with transaction.atomic():
+        try:
+            game = (
+                Game.objects.select_for_update(of=("self",))
+                .select_related("white_player", "black_player")
+                .get(id=game_id)
+            )
+        except Game.DoesNotExist:
+            raise GameDoesNotExist
 
-    if game.status == Game.Status.FINISHED:
-        raise TheGameIsFinished
-    if game.white_player == user:
-        game.white_joined = True
+        if game.status == Game.Status.FINISHED:
+            raise TheGameIsFinished
+        if game.white_player == user:
+            game.white_joined = True
 
-    elif game.black_player == user:
-        game.black_joined = True
+        elif game.black_player == user:
+            game.black_joined = True
 
-    else:
-        raise PlayerDoesNotBelongToGameError
+        else:
+            raise PlayerDoesNotBelongToGameError
 
-    # Changes game status to IN_PROGRESS only if current game status is WAITING
-    if game.white_joined and game.black_joined and game.status == Game.Status.WAITING:
-        game.status = Game.Status.IN_PROGRESS
-        game.current_turn_started_at = timezone.now()
-        # call task than start count white time
-        task = check_opponent_time.apply_async(
-            args=[game_id, 0],
-            countdown=game.white_time_remaining,
-        )
-        game.pending_timeout_task_id = task.id
+        # Changes game status to IN_PROGRESS only if current game status is WAITING
+        if game.white_joined and game.black_joined and game.status == Game.Status.WAITING:
+            game.status = Game.Status.IN_PROGRESS
+            game.current_turn_started_at = timezone.now()
+            # call task than start count white time
+            task = check_opponent_time.apply_async(
+                args=[game_id, 0],
+                countdown=game.white_time_remaining,
+            )
+            game.pending_timeout_task_id = task.id
 
-    game.save()
+        game.save()
 
 
 # Functions use in consumers.py receive

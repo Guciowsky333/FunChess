@@ -100,23 +100,25 @@ def abandon_game_if_not_started(game_id: int):
     """
     channel_layer = get_channel_layer()
     with transaction.atomic():
-        game = Game.objects.get(id=game_id)
+        game = Game.objects.select_for_update().get(id=game_id)
 
-        # If the game still have "WAITING" status it means that some player or both didn't connect to the game
-        if game.status == Game.Status.WAITING:
-            game.status = Game.Status.FINISHED
-            game.result = Game.Result.ABANDONED
-            game.save()
+        # If the game already has been started task shouldn't do anything
+        if game.status != Game.Status.WAITING:
+            return
 
-            # Checking who didn't connect to the game and send message to players
-            not_connected = []
-            if not game.white_joined:
-                not_connected.append("white")
-            if not game.black_joined:
-                not_connected.append("black")
+        game.status = Game.Status.FINISHED
+        game.result = Game.Result.ABANDONED
+        game.save()
 
-            async_to_sync(channel_layer.group_send)(
-                f"game_{game.id}",
-                {"type": "game_ended", "content": {"result": game.result, "not_connected_players": not_connected}},
-            )
-        return
+        # Checking who didn't connect to the game and send message to players
+        not_connected = []
+        if not game.white_joined:
+            not_connected.append("white")
+        if not game.black_joined:
+            not_connected.append("black")
+
+    async_to_sync(channel_layer.group_send)(
+        f"game_{game.id}",
+        {"type": "game_ended", "content": {"result": game.result, "not_connected_players": not_connected}},
+    )
+    return
