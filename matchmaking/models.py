@@ -21,7 +21,7 @@ class MatchmakingEntry(models.Model):
 class AbandonedGame(models.Model):
     """
     When a player didn't connect to his game this model will be created
-    5 AbandonedGames during one day due to TemporaryBan for 30 minutes.
+    5 AbandonedGames during 24 hours due to TemporaryBan for 30 minutes.
     """
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
@@ -30,4 +30,4 @@ class AbandonedGame(models.Model):
 
 class TemporaryBan(models.Model):
     banned_user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
-    expired_at = models.DateTimeField()
+    expires_at = models.DateTimeField()

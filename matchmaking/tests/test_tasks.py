@@ -1,10 +1,12 @@
+from datetime import timedelta
 from unittest.mock import patch
 
 import pytest
 from django.db.models import Q
+from django.utils import timezone
 
 from games.models import Game
-from matchmaking.models import MatchmakingEntry
+from matchmaking.models import AbandonedGame, MatchmakingEntry, TemporaryBan
 from matchmaking.tasks import abandon_game_if_not_started, find_opponent_with_large_range
 
 
@@ -105,7 +107,7 @@ def test_find_opponent_with_large_range_third_attempt(
         pytest.param("finished", id="status_finished"),
     ],
 )
-def test_abandon_game_if_not_started_all_statuses(game_status, test_game):
+def test_abandon_game_if_not_started_all_game_statuses(game_status, test_game):
     """
     If game have status "waiting" our task should finish the game with result "ABANDONED"
     otherwise shouldn't do anything.
@@ -122,3 +124,54 @@ def test_abandon_game_if_not_started_all_statuses(game_status, test_game):
     else:
         assert test_game.status == game_status
         assert not test_game.result
+
+
+def test_white_did_not_join(test_game):
+    """
+    In this test black joined to the game but white didn't we expect that
+    task will create AbandonedGame object for white
+    """
+    test_game.black_joined = True
+    test_game.save()
+
+    abandon_game_if_not_started(test_game.id)
+    assert AbandonedGame.objects.filter(
+        user=test_game.white_player,
+    ).exists()
+
+
+def test_both_players_did_not_join(test_game):
+    abandon_game_if_not_started(test_game.id)
+    assert AbandonedGame.objects.filter(
+        user=test_game.white_player,
+    ).exists()
+
+    assert AbandonedGame.objects.filter(
+        user=test_game.black_player,
+    ).exists()
+
+
+def test_white_did_not_join_5_time_per_day(test_game):
+    """
+    In this test white didn't join to his game, but it was his 5 times during 24 hours
+    when he didn't join to a game we expect that task will create TemporaryBan for white player for
+    30 minutes
+    """
+
+    # Create 4 AbandonedGame for white
+    for _ in range(4):
+        AbandonedGame.objects.create(
+            user=test_game.white_player,
+        )
+
+    abandon_game_if_not_started(test_game.id)
+    assert (
+        AbandonedGame.objects.filter(
+            user=test_game.white_player,
+            created_at__gte=timezone.now() - timedelta(hours=24),
+        ).count()
+        == 5
+    )
+    assert TemporaryBan.objects.filter(
+        banned_user=test_game.white_player,
+    ).exists()
