@@ -1,5 +1,5 @@
 from datetime import timedelta
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from django.db.models import Q
@@ -126,29 +126,34 @@ def test_abandon_game_if_not_started_all_game_statuses(game_status, test_game):
         assert not test_game.result
 
 
-def test_white_did_not_join(test_game):
+@pytest.mark.parametrize(
+    "white_jointed, black_jointed, expected",
+    [
+        pytest.param(False, True, ["white"], id="white didn't join"),
+        pytest.param(True, False, ["black"], id="black didn't join"),
+        pytest.param(False, False, ["white", "black"], id="both didn't join"),
+    ],
+)
+def test_abandon_task_sends_not_connected_players(white_jointed, black_jointed, expected, test_game, mocker):
     """
-    In this test black joined to the game but white didn't we expect that
-    task will create AbandonedGame object for white
+    In this test we check if our task correctly sends message with players who didn't join to the game
     """
-    test_game.black_joined = True
+    fake_layer = MagicMock()
+    fake_layer.group_send = AsyncMock()
+    mocker.patch("matchmaking.tasks.get_channel_layer", return_value=fake_layer)
+
+    test_game.white_joined = white_jointed
+    test_game.black_joined = black_jointed
     test_game.save()
 
     abandon_game_if_not_started(test_game.id)
-    assert AbandonedGame.objects.filter(
-        user=test_game.white_player,
-    ).exists()
 
+    fake_layer.group_send.assert_awaited_once()
+    group, message = fake_layer.group_send.await_args.args
 
-def test_both_players_did_not_join(test_game):
-    abandon_game_if_not_started(test_game.id)
-    assert AbandonedGame.objects.filter(
-        user=test_game.white_player,
-    ).exists()
-
-    assert AbandonedGame.objects.filter(
-        user=test_game.black_player,
-    ).exists()
+    assert group == f"game_{test_game.id}"
+    assert message["type"] == "game_ended"
+    assert message["content"]["not_connected_players"] == expected
 
 
 def test_white_did_not_join_5_time_per_day(test_game):
