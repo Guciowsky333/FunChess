@@ -311,3 +311,16 @@ def delete_matchmaking_entry_after_disconnect(user: CustomUser):
         user_matchmaking_entry.delete()
 
     return
+
+
+def check_if_user_has_temporary_ban(user: CustomUser) -> dict:
+    """
+    Returns TemporaryBan's expires time if user has active temporary ban.
+    """
+    now = timezone.now()
+    user_temporary_ban = (
+        TemporaryBan.objects.filter(banned_user=user, expires_at__gte=now).order_by("-expires_at").first()
+    )
+    if user_temporary_ban:
+        return {"banned": True, "expires_at": user_temporary_ban.expires_at.isoformat(timespec="seconds")}
+    return {"banned": False, "expires_at": ""}
