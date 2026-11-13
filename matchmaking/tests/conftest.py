@@ -1,12 +1,15 @@
+from datetime import timedelta
+
 import pytest
 import pytest_asyncio
 from channels.testing import WebsocketCommunicator
+from django.utils import timezone
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from accounts.models import CustomUser
 from config.asgi import application
 from games.models import Game, TimeControl
-from matchmaking.models import MatchmakingEntry
+from matchmaking.models import MatchmakingEntry, TemporaryBan
 
 
 @pytest.fixture
@@ -44,6 +47,14 @@ def test_player_a_matchmaking_entry(db, test_player_a, test_time_control):
         user=test_player_a,
         time_control=test_time_control,
         rating=1000,
+    )
+
+
+@pytest.fixture
+def test_temporary_ban_player_a_for_30min(db, test_player_a):
+    return TemporaryBan.objects.create(
+        banned_user=test_player_a,
+        expires_at=timezone.now() + timedelta(minutes=30),
     )
 
 

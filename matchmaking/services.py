@@ -3,19 +3,26 @@ import random
 from celery.result import AsyncResult
 from django.db import IntegrityError, transaction
 from django.db.models import Q
+from django.utils import timezone
 
 from accounts.models import CustomUser
 from games.models import Game, TimeControl, UserRating
 from games.services import calculate_elo_change
-from matchmaking.exceptions import AlreadySearching, InvalidBody, TimeControlNotExist, YouAlreadyHaveGameInProgress
-from matchmaking.models import MatchmakingEntry
+from matchmaking.exceptions import (
+    AlreadySearching,
+    InvalidBody,
+    TimeControlNotExist,
+    YouAlreadyHaveGameInProgress,
+    YouAreTemporaryBanned,
+)
+from matchmaking.models import MatchmakingEntry, TemporaryBan
 
 
 def validate_matchmaking_request(body: dict) -> TimeControl:
     """
     Validates body in MatchMakingConsumer in this consumer users are enable to send only
     time_control filed that must contains id of existing TimeControl object if all validations will pass
-    returns TimeControl object with provided id
+    returns TimeControl object with provided id.
     """
 
     time_control_id = body.get("time_control_id")
@@ -40,8 +47,23 @@ def create_matchmaking_entry(user: CustomUser, time_control: TimeControl) -> Mat
     Take user's rating at provided time_control and creates MatchMakingEntry for user.
 
     Important: User can't have 2 or more MatchMakingEntry objects at once and user can't
-    have any game in status "WAITING" or "IN_PROGRESS" when function try to create MatchMakingEntry for him
+    have any game in status "WAITING" or "IN_PROGRESS" when function try to create MatchMakingEntry for him.
+
+    Important: Function checks whether user don't have temporary ban for finding games
     """
+
+    # Checks if user has any active ban
+    now = timezone.now()
+    ban = (
+        TemporaryBan.objects.filter(
+            banned_user=user,
+            expires_at__gte=now,
+        )
+        .order_by("-expires_at")
+        .first()
+    )
+    if ban:
+        raise YouAreTemporaryBanned(ban.expires_at)
 
     # Checks if user has any game in progress
     if Game.objects.filter(
@@ -289,3 +311,16 @@ def delete_matchmaking_entry_after_disconnect(user: CustomUser):
         user_matchmaking_entry.delete()
 
     return
+
+
+def check_if_user_has_temporary_ban(user: CustomUser) -> dict:
+    """
+    Returns TemporaryBan's expires time if user has active temporary ban.
+    """
+    now = timezone.now()
+    user_temporary_ban = (
+        TemporaryBan.objects.filter(banned_user=user, expires_at__gte=now).order_by("-expires_at").first()
+    )
+    if user_temporary_ban:
+        return {"banned": True, "expires_at": user_temporary_ban.expires_at.isoformat(timespec="seconds")}
+    return {"banned": False, "expires_at": ""}

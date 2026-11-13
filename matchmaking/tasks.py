@@ -1,11 +1,14 @@
+from datetime import timedelta
+
 from asgiref.sync import async_to_sync
 from celery import shared_task
 from celery.result import AsyncResult
 from channels.layers import get_channel_layer
 from django.db import transaction
+from django.utils import timezone
 
 from games.models import Game, TimeControl
-from matchmaking.models import MatchmakingEntry
+from matchmaking.models import AbandonedGame, MatchmakingEntry, TemporaryBan
 from matchmaking.services import create_game, finding_opponent, show_ratings_changes
 
 
@@ -96,7 +99,10 @@ def abandon_game_if_not_started(game_id: int):
     This task check if players connected to the game and the game hase been started.
 
     When MatchMakingConsumer find opponent and create a game both players have 30s to connect to the game
-    if any of them don't do it the game is finished with result "ABANDONED"
+    if any of them don't do it the game is finished with result "ABANDONED".
+
+    Additionally: If a player didn't connect to his game creates AbandonedGame object for this user
+    if a user has 5 AbandonedGame objects during 24 hours he will receive Ban for 30 minutes for finding games.
     """
     channel_layer = get_channel_layer()
     with transaction.atomic():
@@ -114,8 +120,40 @@ def abandon_game_if_not_started(game_id: int):
         not_connected = []
         if not game.white_joined:
             not_connected.append("white")
+
+            AbandonedGame.objects.create(
+                user=game.white_player,
+            )
+            # Checks if white_player has 5 AbandonedGame during last 24 hours
+            recent_abandoned_games = AbandonedGame.objects.filter(
+                user=game.white_player,
+                created_at__gte=timezone.now() - timedelta(hours=24),
+            ).count()
+
+            if recent_abandoned_games >= 5:
+                # Creates temporary ban for 30 minutes for user
+                TemporaryBan.objects.create(
+                    banned_user=game.white_player,
+                    expires_at=timezone.now() + timedelta(minutes=30),
+                )
+
         if not game.black_joined:
             not_connected.append("black")
+            AbandonedGame.objects.create(
+                user=game.black_player,
+            )
+            # Checks if black_player has 5 AbandonedGame during last 24 hours
+            recent_abandoned_games = AbandonedGame.objects.filter(
+                user=game.black_player,
+                created_at__gte=timezone.now() - timedelta(hours=24),
+            ).count()
+
+            if recent_abandoned_games >= 5:
+                # Creates temporary ban for 30 minutes for user
+                TemporaryBan.objects.create(
+                    banned_user=game.black_player,
+                    expires_at=timezone.now() + timedelta(minutes=30),
+                )
 
     async_to_sync(channel_layer.group_send)(
         f"game_{game.id}",

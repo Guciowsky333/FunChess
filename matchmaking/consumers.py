@@ -3,7 +3,13 @@ import json
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
 
-from matchmaking.exceptions import AlreadySearching, InvalidBody, TimeControlNotExist, YouAlreadyHaveGameInProgress
+from matchmaking.exceptions import (
+    AlreadySearching,
+    InvalidBody,
+    TimeControlNotExist,
+    YouAlreadyHaveGameInProgress,
+    YouAreTemporaryBanned,
+)
 from matchmaking.models import MatchmakingEntry
 from matchmaking.services import (
     delete_matchmaking_entry_after_disconnect,
@@ -71,6 +77,16 @@ class MatchMakingConsumer(AsyncWebsocketConsumer):
             await self.send(
                 text_data=json.dumps(
                     {"error": "Already searching you can not search two or more games at the same time"}
+                )
+            )
+            return
+        except YouAreTemporaryBanned as e:
+            await self.send(
+                text_data=json.dumps(
+                    {
+                        "error": "You are temporarily banned",
+                        "expires_at": e.expires_at.isoformat(timespec="seconds"),
+                    }
                 )
             )
             return

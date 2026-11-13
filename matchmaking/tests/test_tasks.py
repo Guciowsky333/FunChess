@@ -1,10 +1,12 @@
-from unittest.mock import patch
+from datetime import timedelta
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from django.db.models import Q
+from django.utils import timezone
 
 from games.models import Game
-from matchmaking.models import MatchmakingEntry
+from matchmaking.models import AbandonedGame, MatchmakingEntry, TemporaryBan
 from matchmaking.tasks import abandon_game_if_not_started, find_opponent_with_large_range
 
 
@@ -105,7 +107,7 @@ def test_find_opponent_with_large_range_third_attempt(
         pytest.param("finished", id="status_finished"),
     ],
 )
-def test_abandon_game_if_not_started_all_statuses(game_status, test_game):
+def test_abandon_game_if_not_started_all_game_statuses(game_status, test_game):
     """
     If game have status "waiting" our task should finish the game with result "ABANDONED"
     otherwise shouldn't do anything.
@@ -122,3 +124,59 @@ def test_abandon_game_if_not_started_all_statuses(game_status, test_game):
     else:
         assert test_game.status == game_status
         assert not test_game.result
+
+
+@pytest.mark.parametrize(
+    "white_jointed, black_jointed, expected",
+    [
+        pytest.param(False, True, ["white"], id="white didn't join"),
+        pytest.param(True, False, ["black"], id="black didn't join"),
+        pytest.param(False, False, ["white", "black"], id="both didn't join"),
+    ],
+)
+def test_abandon_task_sends_not_connected_players(white_jointed, black_jointed, expected, test_game, mocker):
+    """
+    In this test we check if our task correctly sends message with players who didn't join to the game
+    """
+    fake_layer = MagicMock()
+    fake_layer.group_send = AsyncMock()
+    mocker.patch("matchmaking.tasks.get_channel_layer", return_value=fake_layer)
+
+    test_game.white_joined = white_jointed
+    test_game.black_joined = black_jointed
+    test_game.save()
+
+    abandon_game_if_not_started(test_game.id)
+
+    fake_layer.group_send.assert_awaited_once()
+    group, message = fake_layer.group_send.await_args.args
+
+    assert group == f"game_{test_game.id}"
+    assert message["type"] == "game_ended"
+    assert message["content"]["not_connected_players"] == expected
+
+
+def test_white_did_not_join_5_time_per_day(test_game):
+    """
+    In this test white didn't join to his game, but it was his 5 times during 24 hours
+    when he didn't join to a game we expect that task will create TemporaryBan for white player for
+    30 minutes
+    """
+
+    # Create 4 AbandonedGame for white
+    for _ in range(4):
+        AbandonedGame.objects.create(
+            user=test_game.white_player,
+        )
+
+    abandon_game_if_not_started(test_game.id)
+    assert (
+        AbandonedGame.objects.filter(
+            user=test_game.white_player,
+            created_at__gte=timezone.now() - timedelta(hours=24),
+        ).count()
+        == 5
+    )
+    assert TemporaryBan.objects.filter(
+        banned_user=test_game.white_player,
+    ).exists()

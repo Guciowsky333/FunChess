@@ -16,3 +16,18 @@ class MatchmakingEntry(models.Model):
     pending_task_id = models.CharField(max_length=36, null=True, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
+
+
+class AbandonedGame(models.Model):
+    """
+    When a player didn't connect to his game this model will be created
+    5 AbandonedGames during 24 hours due to TemporaryBan for 30 minutes.
+    """
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class TemporaryBan(models.Model):
+    banned_user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    expires_at = models.DateTimeField()

@@ -166,3 +166,33 @@ async def test_player_disconnect_before_sending_time_control(
     # After disconnect user still shouldn't have a MatchmakingEntry object in db
     await communicator.disconnect()
     assert not await database_sync_to_async(lambda: MatchmakingEntry.objects.filter(user=test_player_a).exists())()
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_player_has_temporary_ban(
+    test_token_player_a, test_player_a, test_temporary_ban_player_a_for_30min, test_time_control, mocker
+):
+    """
+    In this test test_player_a has temporary ban for 30 minutes so expect the consumer won't allow him to find
+    a game and returns message to the user about his ban
+    """
+    # Mocking find_opponent_with_large_range task
+    mock_task = mocker.patch("matchmaking.tasks.find_opponent_with_large_range.apply_async")
+    mock_task.return_value.id = "test-task-id"
+
+    communicator = WebsocketCommunicator(
+        application,
+        "/ws/matchmaking/",
+        headers=[(b"cookie", f"access_token={test_token_player_a}".encode())],
+    )
+
+    await communicator.connect()
+    await communicator.send_to(text_data=json.dumps({"time_control_id": test_time_control.id}))
+
+    response = await communicator.receive_from()
+    data = json.loads(response)
+    assert data["error"] == "You are temporarily banned"
+    assert data["expires_at"] == test_temporary_ban_player_a_for_30min.expires_at.isoformat(timespec="seconds")
+
+    await communicator.disconnect()

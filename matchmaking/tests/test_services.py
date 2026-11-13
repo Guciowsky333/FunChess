@@ -1,8 +1,17 @@
+from datetime import timedelta
+
 import pytest
+from django.utils import timezone
 
 from games.models import Game, UserRating
-from matchmaking.exceptions import AlreadySearching, InvalidBody, TimeControlNotExist, YouAlreadyHaveGameInProgress
-from matchmaking.models import MatchmakingEntry
+from matchmaking.exceptions import (
+    AlreadySearching,
+    InvalidBody,
+    TimeControlNotExist,
+    YouAlreadyHaveGameInProgress,
+    YouAreTemporaryBanned,
+)
+from matchmaking.models import MatchmakingEntry, TemporaryBan
 from matchmaking.services import (
     create_game,
     create_matchmaking_entry,
@@ -81,6 +90,20 @@ def test_user_already_has_game_in_progress(test_player_a, test_time_control, tes
         time_control=test_time_control,
     )
     with pytest.raises(YouAlreadyHaveGameInProgress):
+        create_matchmaking_entry(test_player_a, test_time_control)
+
+
+def test_user_has_active_temporary_ban(test_player_a, test_time_control):
+    """
+    In this test test_player_a has active TemporaryBan for 30 minutes so expect
+    that function raise YouAreTemporaryBanned.
+    """
+    # Create TemporaryBan for test_player_a
+    TemporaryBan.objects.create(
+        banned_user=test_player_a,
+        expires_at=timezone.now() + timedelta(minutes=30),
+    )
+    with pytest.raises(YouAreTemporaryBanned):
         create_matchmaking_entry(test_player_a, test_time_control)
 
 
