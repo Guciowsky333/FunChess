@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 import chess
 from channels.db import database_sync_to_async
 from django.db import transaction
@@ -48,9 +50,11 @@ def connect_player_to_game(game_id: int, user: CustomUser):
             raise TheGameIsFinished
         if game.white_player == user:
             game.white_joined = True
+            game.white_connected = True
 
         elif game.black_player == user:
             game.black_joined = True
+            game.black_connected = True
 
         else:
             raise PlayerDoesNotBelongToGameError
@@ -464,3 +468,24 @@ def change_players_ratings_after_game(game: Game) -> None:
     white_rating.save()
 
     black_rating.save()
+
+
+def player_disconnect_from_game(user: CustomUser, game: Game) -> None:
+    """
+    Changes fields white/black_connected as False and establishes white/black_disconnected_deadline.
+    This function is used in GamesConsumer in disconnect method.
+
+    Important: Each player has exactly 30s to connect back to the game after disconnected.
+    """
+    now = timezone.now()
+
+    # Checks which color provided user is
+    is_white = game.white_player == user
+    if is_white:
+        game.white_connected = False
+        game.white_disconnected_deadline = now + timedelta(seconds=30)
+    else:
+        game.black_connected = False
+        game.black_disconnected_deadline = now + timedelta(seconds=30)
+    game.save()
+    return

@@ -26,6 +26,7 @@ from games.services import (
     draw_offer,
     draw_reject,
     get_current_turn_player,
+    player_disconnect_from_game,
     process_move,
     surrender_the_game,
     update_pending_task_id,
@@ -35,12 +36,17 @@ from games.tasks import check_opponent_time
 
 
 @database_sync_to_async
-def get_game(game_id):
+def get_game(game_id: int):
     return Game.objects.select_related("white_player", "black_player").get(pk=game_id)
 
 
 @database_sync_to_async
-def save_game(game):
+def get_game_or_none(game_id: int):
+    return Game.objects.select_related("white_player", "black_player").filter(pk=game_id).first()
+
+
+@database_sync_to_async
+def save_game(game: Game):
     game.save()
 
 
@@ -85,6 +91,9 @@ class GamesConsumer(AsyncWebsocketConsumer):
             return
 
     async def disconnect(self, close_code):
+        game = await get_game_or_none(self.game_id)
+        if game is not None:
+            await database_sync_to_async(player_disconnect_from_game)(self.scope["user"], game)
         await self.channel_layer.group_discard(self.game_group_name, self.channel_name)
 
     async def receive(self, text_data):

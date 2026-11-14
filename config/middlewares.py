@@ -34,7 +34,6 @@ class JWTAuthMiddleware:
                     validated_token = jwt_auth.get_validated_token(token.encode())
                     user = await database_sync_to_async(jwt_auth.get_user)(validated_token)
                 except (InvalidToken, AuthenticationFailed):
-                    print("jd")
                     user = AnonymousUser()
         scope["user"] = user
         return await self.app(scope, receive, send)

@@ -593,3 +593,6 @@ def test_change_players_ratings_after_game_without_result(test_game):
     test_game.result = None
     with pytest.raises(ValueError, match="The game does not have result yet"):
         change_players_ratings_after_game(test_game)
+
+
+# Tests for "player_disconnect_from_game" function
