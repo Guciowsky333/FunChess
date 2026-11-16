@@ -26,27 +26,38 @@ from games.services import (
     draw_offer,
     draw_reject,
     get_current_turn_player,
+    player_disconnect_from_game,
     process_move,
     surrender_the_game,
     update_pending_task_id,
     validate_action,
 )
-from games.tasks import check_opponent_time
+from games.tasks import check_if_user_is_still_disconnected, check_opponent_time
 
 
 @database_sync_to_async
-def get_game(game_id):
+def get_game(game_id: int):
     return Game.objects.select_related("white_player", "black_player").get(pk=game_id)
 
 
 @database_sync_to_async
-def save_game(game):
+def get_game_or_none(game_id: int):
+    return Game.objects.select_related("white_player", "black_player").filter(pk=game_id).first()
+
+
+@database_sync_to_async
+def save_game(game: Game):
     game.save()
 
 
 class GamesConsumer(AsyncWebsocketConsumer):
-    async def connect(self):
+    def __init__(self, *args, **kwargs):
+        super().__init__(args, kwargs)
+        self.game_id = None
+        self.joined_game = None
 
+    async def connect(self):
+        self.joined_game = False
         self.game_id = self.scope["url_route"]["kwargs"]["game_id"]
         self.game_group_name = f"game_{self.game_id}"
         user = self.scope["user"]
@@ -65,6 +76,7 @@ class GamesConsumer(AsyncWebsocketConsumer):
             )
 
             await self.accept()
+            self.joined_game = True
 
         except TheGameIsFinished:
             await self.accept()
@@ -85,6 +97,19 @@ class GamesConsumer(AsyncWebsocketConsumer):
             return
 
     async def disconnect(self, close_code):
+        game = await get_game_or_none(self.game_id)
+
+        # If user joined to the game set white/black_connected as False and run task if the game has status IN_PROGRESS
+        if self.joined_game:
+            if game is not None and game.status != Game.Status.FINISHED:
+                await database_sync_to_async(player_disconnect_from_game)(self.scope["user"], game)
+
+                if game.status == Game.Status.IN_PROGRESS:
+                    # Each user has exactly 30s to returned to the game after this time the game is over
+                    await database_sync_to_async(check_if_user_is_still_disconnected.apply_async)(
+                        args=[self.scope["user"].id, game.id], countdown=30
+                    )
+
         await self.channel_layer.group_discard(self.game_group_name, self.channel_name)
 
     async def receive(self, text_data):

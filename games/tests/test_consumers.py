@@ -24,6 +24,7 @@ async def test_connect_as_white_player(test_game_status_waiting, access_token_wh
     assert connected
     await database_sync_to_async(test_game_status_waiting.refresh_from_db)()
     assert test_game_status_waiting.white_joined
+    assert test_game_status_waiting.white_connected
     await communicator.disconnect()
 
 
@@ -370,3 +371,34 @@ async def test_receive_first_move(connected_players):
     assert white_data["last_move_to_square"] == "d4" and black_data["last_move_to_square"] == "d4"
 
     assert await _move_exist(game, white_communicator.scope["user"], "d2", "d4")
+
+
+# Tests GamesConsumer disconnected
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_white_disconnected(access_token_white, test_game_status_waiting):
+    """
+    In this test we check whether when white will disconnect from the game GamesConsumer correctly
+    changes fields white_connected and establishes white_disconnected_deadline
+    """
+
+    white_communicator = WebsocketCommunicator(
+        application,
+        f"ws/games/{test_game_status_waiting.id}/",
+        headers=[(b"cookie", f"access_token={access_token_white}".encode())],
+    )
+
+    await white_communicator.connect()
+
+    await database_sync_to_async(test_game_status_waiting.refresh_from_db)()
+
+    # Now white should be connected and filed white_disconnected_deadline should be empty
+    assert test_game_status_waiting.white_connected
+    assert not test_game_status_waiting.white_disconnected_deadline
+
+    # After disconnected fields should be changed
+    await white_communicator.disconnect()
+    await database_sync_to_async(test_game_status_waiting.refresh_from_db)()
+
+    assert not test_game_status_waiting.white_connected
+    assert test_game_status_waiting.white_disconnected_deadline

@@ -74,8 +74,17 @@ class Game(models.Model):
 
     reason = models.CharField(choices=Reason.choices, max_length=21, blank=True, null=True)
 
+    # This fields show if players joined to the game at all, if player join once fild will be true ale the time
     white_joined = models.BooleanField(default=False)
     black_joined = models.BooleanField(default=False)
+
+    # This fields show if players are currently connected to the game
+    white_connected = models.BooleanField(default=False)
+    black_connected = models.BooleanField(default=False)
+
+    # This fields show time until black and white must connect to the game again after disconnected
+    white_disconnected_deadline = models.DateTimeField(null=True, blank=True)
+    black_disconnected_deadline = models.DateTimeField(null=True, blank=True)
 
     white_player = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="games_as_white")
     black_player = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="games_as_black")
@@ -84,6 +93,7 @@ class Game(models.Model):
 
     white_time_remaining = models.PositiveIntegerField(null=True, blank=True)
     black_time_remaining = models.PositiveIntegerField(null=True, blank=True)
+
     current_turn_started_at = models.DateTimeField(null=True, blank=True)
 
     draw_offered_by = models.CharField(choices=DrawOfferedBy.choices, max_length=5, blank=True, null=True)
