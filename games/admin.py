@@ -10,7 +10,7 @@ class TimeControlAdmin(admin.ModelAdmin):
 
 @admin.register(Game)
 class GameAdmin(admin.ModelAdmin):
-    list_display = ["id", "result", "status", "time_control_category"]
+    list_display = ["id", "result", "status", "reason", "time_control_category"]
 
     def time_control_category(self, obj):
         return obj.time_control.category

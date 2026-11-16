@@ -204,8 +204,12 @@ def _determine_players_color(
 
 def create_game(player_a: CustomUser, player_b: CustomUser, time_control: TimeControl) -> int:
     """
-    Creates a game and returns its id
+    Creates a game and returns its id.
+    Runs task "abandon_game_if_not_started" that will finish the game as "ABANDONED" if both
+    players don't join to the game within 30s.
     """
+
+    from matchmaking.tasks import abandon_game_if_not_started
 
     # Establishes who should play as white and who as black
     white_player, black_player = _determine_players_color(player_a, player_b, time_control)
@@ -217,6 +221,10 @@ def create_game(player_a: CustomUser, player_b: CustomUser, time_control: TimeCo
         white_time_remaining=time_control.initial_time_seconds,
         black_time_remaining=time_control.initial_time_seconds,
     )
+
+    # Runs task
+    abandon_game_if_not_started.apply_async(args=[game.id], countdown=30)
+
     return game.id
 
 
