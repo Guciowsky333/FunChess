@@ -1,8 +1,14 @@
+from datetime import timedelta
+
+import pytest
+from django.utils import timezone
+
 from games.models import Game, Move
 from games.services import process_move
-from games.tasks import check_opponent_time
+from games.tasks import check_if_user_is_still_disconnected, check_opponent_time
 
 
+# Tests for 'check_opponent_time' task
 def test_check_opponent_time_opponent_made_move(test_game):
     """
     Our celery task "check_opponent_time" during real game will run
@@ -147,3 +153,78 @@ def test_check_opponent_time_game_status_is_not_in_progress(test_game):
     check_opponent_time(test_game.id, 1)
     # test_game status should be unchanged "FINISHED"
     assert test_game.status == Game.Status.FINISHED
+
+
+# Tests for 'check_if_user_is_still_disconnected' task
+@pytest.mark.parametrize(
+    "game_status",
+    [
+        pytest.param("waiting", id="game status is waiting"),
+        pytest.param("finished", id="game status is finished"),
+    ],
+)
+def test_disconnect_task_game_status_is_not_in_progress(test_game, game_status):
+    """
+    Task should not do anything with the game that has different status than "IN_PROGRESS".
+    """
+    test_game.status = game_status
+    test_game.white_connected = False
+    test_game.save()
+
+    check_if_user_is_still_disconnected(test_game.white_player.id, test_game.id)
+
+    # Even thought white is still disconnected if game status is other than "IN_PROGRESS" tash should not change anything in the game
+    assert test_game.status == game_status
+    assert not test_game.white_connected
+
+
+def test_disconnect_task_user_returned(test_game):
+    """
+    In this test white has returned to the game and now filed "white_connected" is True so
+    task should do nothing.
+    """
+    test_game.white_connected = True
+    test_game.save()
+
+    check_if_user_is_still_disconnected(test_game.white_player.id, test_game.id)
+
+    # The game status should not be changed because white has returned to the game during 30s
+    assert test_game.status == Game.Status.IN_PROGRESS
+
+
+def test_disconnect_task_white_did_not_return(test_game):
+    """
+    In this test white player disconnected form the game, and he has not returned to the game.
+    Expect that our task will finish the game as BLACK_WON
+    """
+    test_game.white_connected = False
+    test_game.white_disconnected_deadline = timezone.now() - timedelta(seconds=1)
+
+    test_game.save()
+
+    check_if_user_is_still_disconnected(test_game.white_player.id, test_game.id)
+
+    test_game.refresh_from_db()
+    assert test_game.status == Game.Status.FINISHED
+    assert test_game.result == Game.Result.BLACK_WON
+
+
+def test_disconnect_task_both_players_disconnected_at_the_same_time(test_game):
+    """
+    In this test, both players disconnected at the exact same moment.
+    Expected that white's or black's task (it does not matter which) will finish the game
+    as DRAW because both players are disconnected and they both exceeded their disconnected_deadline
+    """
+    test_game.white_connected = False
+    test_game.black_connected = False
+
+    # Both players exceeded disconnected_deadline
+    test_game.white_disconnected_deadline = timezone.now() - timedelta(seconds=1)
+    test_game.black_disconnected_deadline = timezone.now() - timedelta(seconds=1)
+    test_game.save()
+
+    check_if_user_is_still_disconnected(test_game.black_player, test_game.id)
+
+    test_game.refresh_from_db()
+    assert test_game.status == Game.Status.FINISHED
+    assert test_game.result == Game.Result.DRAW

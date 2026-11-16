@@ -20,7 +20,6 @@ from games.exceptions import (
     TooLongMessage,
 )
 from games.models import ChatMessage, Game, Move, UserRating
-from games.tasks import check_opponent_time
 
 
 # Functions use in consumers.py connect
@@ -36,6 +35,8 @@ def connect_player_to_game(game_id: int, user: CustomUser):
     changes the game status to IN_PROGRESS and sets
     "current_turn_started_at" to the current time.
     """
+    from games.tasks import check_opponent_time
+
     with transaction.atomic():
         try:
             game = (
@@ -51,10 +52,12 @@ def connect_player_to_game(game_id: int, user: CustomUser):
         if game.white_player == user:
             game.white_joined = True
             game.white_connected = True
+            game.white_disconnected_deadline = None
 
         elif game.black_player == user:
             game.black_joined = True
             game.black_connected = True
+            game.black_disconnected_deadline = None
 
         else:
             raise PlayerDoesNotBelongToGameError
@@ -465,8 +468,8 @@ def change_players_ratings_after_game(game: Game) -> None:
 
     white_rating.rating += white_change
     black_rating.rating += black_change
-    white_rating.save()
 
+    white_rating.save()
     black_rating.save()
 
 
