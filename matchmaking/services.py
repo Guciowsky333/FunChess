@@ -214,6 +214,8 @@ def create_game(player_a: CustomUser, player_b: CustomUser, time_control: TimeCo
         white_player=white_player,
         black_player=black_player,
         time_control=time_control,
+        white_time_remaining=time_control.initial_time_seconds,
+        black_time_remaining=time_control.initial_time_seconds,
     )
     return game.id
 
