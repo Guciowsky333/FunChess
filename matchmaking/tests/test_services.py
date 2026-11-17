@@ -258,9 +258,9 @@ def test_create_game_player_a_without_any_game(test_player_a, test_player_b, tes
         time_control=test_time_control,
         status=Game.Status.FINISHED,
     )
-    create_game(test_player_a, test_player_b, test_time_control)
     game_id = create_game(test_player_a, test_player_b, test_time_control)
     new_game = Game.objects.get(pk=game_id)
+
     assert new_game.time_control == test_time_control
     assert new_game.white_player == test_player_a
     assert new_game.black_player == test_player_b
