@@ -8,7 +8,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from accounts.models import CustomUser
 from config.asgi import application
-from games.models import Game, TimeControl
+from games.models import Game, TimeControl, UserRating
 from matchmaking.models import MatchmakingEntry, TemporaryBan
 
 
@@ -18,6 +18,8 @@ def test_game(db, test_player_a, test_player_b, test_time_control):
         white_player=test_player_a,
         black_player=test_player_b,
         time_control=test_time_control,
+        white_rating=300,
+        black_rating=300,
     )
 
 
@@ -34,6 +36,22 @@ def test_player_a(db):
 @pytest.fixture
 def test_player_b(db):
     return CustomUser.objects.create_user(email="player_b@com", username="test_player_b")
+
+
+@pytest.fixture
+def test_rating_player_a_1200(test_player_a, test_time_control):
+    user_rating = UserRating.objects.get(user=test_player_a, category=test_time_control.category)
+    user_rating.rating = 1200
+    user_rating.save()
+    return user_rating.rating
+
+
+@pytest.fixture
+def test_rating_player_b_1000(test_player_b, test_time_control):
+    user_rating = UserRating.objects.get(user=test_player_b, category=test_time_control.category)
+    user_rating.rating = 1000
+    user_rating.save()
+    return user_rating.rating
 
 
 @pytest.fixture

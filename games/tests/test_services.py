@@ -22,6 +22,7 @@ from games.services import (
     draw_offer,
     draw_reject,
     get_current_turn_player,
+    player_disconnect_from_game,
     process_move,
     surrender_the_game,
     validate_action,
@@ -526,9 +527,13 @@ def test_change_players_ratings_after_game_white_won(test_game_with_updated_rati
     change_players_ratings_after_game(game)
     white_rating.refresh_from_db()
     black_rating.refresh_from_db()
+    game.refresh_from_db()
 
     assert white_rating.rating == 1200 + 8
     assert black_rating.rating == 1000 - 8
+
+    assert game.white_change == 8
+    assert game.black_change == -8
 
 
 def test_change_players_ratings_after_game_black_won(test_game_with_updated_ratings):
@@ -596,3 +601,17 @@ def test_change_players_ratings_after_game_without_result(test_game):
 
 
 # Tests for "player_disconnect_from_game" function
+
+
+def test_white_disconnect_from_game(test_game):
+    player_disconnect_from_game(test_game.white_player, test_game)
+    test_game.refresh_from_db()
+    assert not test_game.white_connected
+    assert test_game.white_disconnected_deadline is not None
+
+
+def test_black_disconnect_from_game(test_game):
+    player_disconnect_from_game(test_game.black_player, test_game)
+    test_game.refresh_from_db()
+    assert not test_game.black_connected
+    assert test_game.black_disconnected_deadline is not None

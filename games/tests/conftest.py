@@ -36,6 +36,8 @@ def test_game(test_user_1, test_user_2, test_time_control_10_minutes):
         white_time_remaining=600,
         black_time_remaining=600,
         status=Game.Status.IN_PROGRESS,
+        white_rating=300,
+        black_rating=300,
     )
 
 
@@ -47,6 +49,8 @@ def test_game_status_waiting(test_user_1, test_user_2, test_time_control_10_minu
         time_control=test_time_control_10_minutes,
         white_time_remaining=600,
         black_time_remaining=600,
+        white_rating=300,
+        black_rating=300,
     )
 
 

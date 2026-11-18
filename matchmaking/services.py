@@ -214,12 +214,18 @@ def create_game(player_a: CustomUser, player_b: CustomUser, time_control: TimeCo
     # Establishes who should play as white and who as black
     white_player, black_player = _determine_players_color(player_a, player_b, time_control)
 
+    # Players ratings at the start of the game
+    white_rating = UserRating.objects.get(user=white_player, category=time_control.category)
+    black_rating = UserRating.objects.get(user=black_player, category=time_control.category)
+
     game = Game.objects.create(
         white_player=white_player,
         black_player=black_player,
         time_control=time_control,
         white_time_remaining=time_control.initial_time_seconds,
         black_time_remaining=time_control.initial_time_seconds,
+        white_rating=white_rating.rating,
+        black_rating=black_rating.rating,
     )
 
     # Runs task
