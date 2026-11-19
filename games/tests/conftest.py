@@ -1,9 +1,11 @@
+from datetime import timedelta
 from unittest.mock import patch
 
 import pytest
 import pytest_asyncio
 from channels.db import database_sync_to_async
 from channels.testing import WebsocketCommunicator
+from django.utils import timezone
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from accounts.models import CustomUser
@@ -38,6 +40,36 @@ def test_game(test_user_1, test_user_2, test_time_control_10_minutes):
         status=Game.Status.IN_PROGRESS,
         white_rating=300,
         black_rating=300,
+    )
+
+
+@pytest.fixture
+def test_player_a_game_1_day_ago(test_player_a, test_opponent, test_time_control):
+    return Game.objects.create(
+        white_player=test_player_a,
+        black_player=test_opponent,
+        time_control=test_time_control,
+        white_time_remaining=600,
+        black_time_remaining=600,
+        status=Game.Status.FINISHED,
+        white_rating=300,
+        black_rating=300,
+        finished_at=timezone.now() - timedelta(days=1),
+    )
+
+
+@pytest.fixture
+def test_player_a_game_2_day_ago(test_player_a, test_opponent, test_time_control):
+    return Game.objects.create(
+        white_player=test_player_a,
+        black_player=test_opponent,
+        time_control=test_time_control,
+        white_time_remaining=600,
+        black_time_remaining=600,
+        status=Game.Status.FINISHED,
+        white_rating=300,
+        black_rating=300,
+        finished_at=timezone.now() - timedelta(days=2),
     )
 
 
