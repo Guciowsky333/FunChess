@@ -532,8 +532,8 @@ def test_change_players_ratings_after_game_white_won(test_game_with_updated_rati
     assert white_rating.rating == 1200 + 8
     assert black_rating.rating == 1000 - 8
 
-    assert game.white_change == 8
-    assert game.black_change == -8
+    assert game.white_rating_change == 8
+    assert game.black_rating_change == -8
 
 
 def test_change_players_ratings_after_game_black_won(test_game_with_updated_ratings):
