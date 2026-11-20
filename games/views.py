@@ -1,5 +1,6 @@
 # Create your views here.
 from django.db.models import Q
+from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import generics
 from rest_framework.permissions import IsAuthenticated
@@ -23,15 +24,43 @@ class BaseGameHistoryView(generics.ListAPIView):
     - Authentication required.
     """,
     responses={
-        200: OpenApiResponse(description="All user's games our player with provided username"),
+        200: OpenApiResponse(description="All user's games"),
         401: OpenApiResponse(description="Unauthorized"),
     },
 )
 class MyGameHistoryView(BaseGameHistoryView):
-    serializer_class = GameHistorySerializer
-
     def get_queryset(self):
         user = CustomUser.objects.get(id=self.request.user.id)
+        games = (
+            Game.objects.filter(
+                Q(white_player=user) | Q(black_player=user),
+                status=Game.Status.FINISHED,
+            )
+            .select_related("white_player", "black_player", "time_control")
+            .order_by("-finished_at", "-id")
+        )
+        return games
+
+
+@extend_schema(
+    summary="Games History of provided player",
+    description="""
+    Returns all games of a player with provided username in the url, sorted by the previous one by default 
+    
+    Business rules:
+    - Authentication required.
+    - User with provided username must exist.
+    """,
+    responses={
+        200: OpenApiResponse(description="All games of the user with provided username"),
+        401: OpenApiResponse(description="Unauthorized"),
+        404: OpenApiResponse(description="User with provided username not found"),
+    },
+)
+class PlayerGameHistoryView(BaseGameHistoryView):
+    def get_queryset(self):
+        username = self.kwargs.get("username")
+        user = get_object_or_404(CustomUser, username=username)
         games = (
             Game.objects.filter(
                 Q(white_player=user) | Q(black_player=user),
