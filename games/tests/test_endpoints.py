@@ -1,3 +1,4 @@
+import pytest
 from rest_framework import status
 from rest_framework.test import APIClient
 
@@ -88,6 +89,7 @@ def test_history_username_requires_authentication(test_player_a):
 # Tests filters in history endpoints
 
 
+# Filter result
 def test_result_only_wins(test_player_b, test_player_a, test_game_win, test_game_lose, test_game_draw):
     """
     In this test player_b checks player_a's games but only wins. Even though player_a has 3 games
@@ -143,6 +145,7 @@ def test_wrong_result(test_player_a):
     assert response.status_code == status.HTTP_400_BAD_REQUEST
 
 
+# Filter color
 def test_color_white(test_player_a, test_game_white, test_game_black):
     """
     In this test our user want to see only games where he plated as white. Even though user has 2 games
@@ -181,6 +184,7 @@ def test_wrong_color(test_player_a):
     assert response.status_code == status.HTTP_400_BAD_REQUEST
 
 
+# Filter category
 def test_category_bullet(test_player_a, test_game_bullet, test_game_blitz, test_game_rapid):
     """
     In this test user want to see all games but only in bullet. Even though user has 3 games
@@ -231,3 +235,31 @@ def test_wrong_category(test_player_a):
     client.force_authenticate(test_player_a)
     response = client.get("/api/games/history/me/?category=wrong_category")
     assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+
+# Tests for order
+@pytest.mark.parametrize(
+    "order, expected_status",
+    [
+        pytest.param("?order=finished_at", status.HTTP_200_OK, id="Sorted games starting from the older one"),
+        pytest.param("", status.HTTP_200_OK, id="Sorted games starting from the newer one by default"),
+        pytest.param("?order=''", status.HTTP_400_BAD_REQUEST, id="Empty order"),
+        pytest.param("?order=invalid_order", status.HTTP_400_BAD_REQUEST, id="Invalid order"),
+    ],
+)
+def test_ordering(order, expected_status, test_player_a, test_player_a_game_1_day_ago, test_player_a_game_2_day_ago):
+    client = APIClient()
+    client.force_authenticate(test_player_a)
+    response = client.get(f"/api/games/history/me/{order}")
+    assert response.status_code == expected_status
+    data = response.json()
+
+    if order == "?order=finished_at":
+        # Games should be sorted starting from the older one so test_player_a_game_2_day_ago should be first
+        assert data[0]["id"] == test_player_a_game_2_day_ago.id
+        assert data[1]["id"] == test_player_a_game_1_day_ago.id
+    if order == "":
+        # If user doesn't provide any order by default games should be sorted starting from the newest one
+        # So test_player_a_game_1_day_ago should be first
+        assert data[0]["id"] == test_player_a_game_1_day_ago.id
+        assert data[1]["id"] == test_player_a_game_2_day_ago.id
