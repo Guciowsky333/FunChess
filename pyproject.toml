@@ -14,6 +14,7 @@ dependencies = [
     "chess>=1.11.2",
     "daphne>=4.2.3",
     "django>=6.1",
+    "django-filter>=26.2",
     "djangorestframework>=3.18.0",
     "djangorestframework-simplejwt>=5.5.1",
     "drf-spectacular>=0.30.0",

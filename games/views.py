@@ -6,13 +6,17 @@ from rest_framework import generics
 from rest_framework.permissions import IsAuthenticated
 
 from accounts.models import CustomUser
+from games.filters import GameHistoryFilter, GameHistoryFilterBackend
 from games.models import Game
 from games.serializers import GameHistorySerializer
 
 
 class BaseGameHistoryView(generics.ListAPIView):
+    queryset = Game.objects.none()
     serializer_class = GameHistorySerializer
     permission_classes = [IsAuthenticated]
+    filter_backends = [GameHistoryFilterBackend]
+    filterset_class = GameHistoryFilter
 
 
 @extend_schema(
@@ -40,6 +44,9 @@ class MyGameHistoryView(BaseGameHistoryView):
             .order_by("-finished_at", "-id")
         )
         return games
+
+    def get_target_user(self):
+        return self.request.user
 
 
 @extend_schema(
@@ -70,3 +77,8 @@ class PlayerGameHistoryView(BaseGameHistoryView):
             .order_by("-finished_at", "-id")
         )
         return games
+
+    def get_target_user(self):
+        username = self.kwargs.get("username")
+        user = get_object_or_404(CustomUser, username=username)
+        return user
