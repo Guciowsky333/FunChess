@@ -2,6 +2,8 @@ import pytest
 from rest_framework import status
 from rest_framework.test import APIClient
 
+from games.models import Game
+
 # Test for /api/games/history/me/
 
 
@@ -19,18 +21,18 @@ def test_history_me(test_player_a, test_player_a_game_1_day_ago, test_player_a_g
     data = response.json()
 
     # Checking if order is correct
-    assert data[0]["id"] == test_player_a_game_1_day_ago.id
-    assert data[1]["id"] == test_player_a_game_2_day_ago.id
+    assert data["results"][0]["id"] == test_player_a_game_1_day_ago.id
+    assert data["results"][1]["id"] == test_player_a_game_2_day_ago.id
 
     # Checking all fields
-    assert data[0]["time_control"]["id"] == test_player_a_game_1_day_ago.time_control.id
-    assert data[0]["time_control"]["category"] == test_player_a_game_1_day_ago.time_control.category
+    assert data["results"][0]["time_control"]["id"] == test_player_a_game_1_day_ago.time_control.id
+    assert data["results"][0]["time_control"]["category"] == test_player_a_game_1_day_ago.time_control.category
 
-    assert data[0]["result"] == test_player_a_game_1_day_ago.result
-    assert data[0]["reason"] == test_player_a_game_1_day_ago.reason
+    assert data["results"][0]["result"] == test_player_a_game_1_day_ago.result
+    assert data["results"][0]["reason"] == test_player_a_game_1_day_ago.reason
 
-    assert data[0]["white_player"]["id"] == test_player_a_game_1_day_ago.white_player.id
-    assert data[0]["black_player"]["id"] == test_player_a_game_1_day_ago.black_player.id
+    assert data["results"][0]["white_player"]["id"] == test_player_a_game_1_day_ago.white_player.id
+    assert data["results"][0]["black_player"]["id"] == test_player_a_game_1_day_ago.black_player.id
 
 
 def test_history_me_requires_authentication():
@@ -56,18 +58,18 @@ def test_history_username(test_player_b, test_player_a, test_player_a_game_1_day
     data = response.json()
 
     # Checking if order is correct
-    assert data[0]["id"] == test_player_a_game_1_day_ago.id
-    assert data[1]["id"] == test_player_a_game_2_day_ago.id
+    assert data["results"][0]["id"] == test_player_a_game_1_day_ago.id
+    assert data["results"][1]["id"] == test_player_a_game_2_day_ago.id
 
     # Checking all fields
-    assert data[0]["time_control"]["id"] == test_player_a_game_1_day_ago.time_control.id
-    assert data[0]["time_control"]["category"] == test_player_a_game_1_day_ago.time_control.category
+    assert data["results"][0]["time_control"]["id"] == test_player_a_game_1_day_ago.time_control.id
+    assert data["results"][0]["time_control"]["category"] == test_player_a_game_1_day_ago.time_control.category
 
-    assert data[0]["result"] == test_player_a_game_1_day_ago.result
-    assert data[0]["reason"] == test_player_a_game_1_day_ago.reason
+    assert data["results"][0]["result"] == test_player_a_game_1_day_ago.result
+    assert data["results"][0]["reason"] == test_player_a_game_1_day_ago.reason
 
-    assert data[0]["white_player"]["id"] == test_player_a_game_1_day_ago.white_player.id
-    assert data[0]["black_player"]["id"] == test_player_a_game_1_day_ago.black_player.id
+    assert data["results"][0]["white_player"]["id"] == test_player_a_game_1_day_ago.white_player.id
+    assert data["results"][0]["black_player"]["id"] == test_player_a_game_1_day_ago.black_player.id
 
 
 def test_history_username_404(test_player_a):
@@ -101,8 +103,8 @@ def test_result_only_wins(test_player_b, test_player_a, test_game_win, test_game
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
     # Should be only one game
-    assert len(data) == 1
-    assert data[0]["id"] == test_game_win.id
+    assert len(data["results"]) == 1
+    assert data["results"][0]["id"] == test_game_win.id
 
 
 def test_result_only_lose(test_player_b, test_player_a, test_game_win, test_game_lose, test_game_draw):
@@ -116,8 +118,8 @@ def test_result_only_lose(test_player_b, test_player_a, test_game_win, test_game
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
     # Should be only one game
-    assert len(data) == 1
-    assert data[0]["id"] == test_game_lose.id
+    assert len(data["results"]) == 1
+    assert data["results"][0]["id"] == test_game_lose.id
 
 
 def test_result_only_draw(test_player_b, test_player_a, test_game_win, test_game_lose, test_game_draw):
@@ -131,8 +133,8 @@ def test_result_only_draw(test_player_b, test_player_a, test_game_win, test_game
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
     # Should be only one game
-    assert len(data) == 1
-    assert data[0]["id"] == test_game_draw.id
+    assert len(data["results"]) == 1
+    assert data["results"][0]["id"] == test_game_draw.id
 
 
 def test_wrong_result(test_player_a):
@@ -156,8 +158,8 @@ def test_color_white(test_player_a, test_game_white, test_game_black):
     response = client.get("/api/games/history/me/?color=white")
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
-    assert len(data) == 1
-    assert data[0]["id"] == test_game_white.id
+    assert len(data["results"]) == 1
+    assert data["results"][0]["id"] == test_game_white.id
 
 
 def test_color_black(test_player_a, test_game_white, test_game_black):
@@ -170,8 +172,8 @@ def test_color_black(test_player_a, test_game_white, test_game_black):
     response = client.get("/api/games/history/me/?color=black")
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
-    assert len(data) == 1
-    assert data[0]["id"] == test_game_black.id
+    assert len(data["results"]) == 1
+    assert data["results"][0]["id"] == test_game_black.id
 
 
 def test_wrong_color(test_player_a):
@@ -195,8 +197,8 @@ def test_category_bullet(test_player_a, test_game_bullet, test_game_blitz, test_
     response = client.get("/api/games/history/me/?category=bullet")
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
-    assert len(data) == 1
-    assert data[0]["id"] == test_game_bullet.id
+    assert len(data["results"]) == 1
+    assert data["results"][0]["id"] == test_game_bullet.id
 
 
 def test_category_blitz(test_player_a, test_game_bullet, test_game_blitz, test_game_rapid):
@@ -209,8 +211,8 @@ def test_category_blitz(test_player_a, test_game_bullet, test_game_blitz, test_g
     response = client.get("/api/games/history/me/?category=blitz")
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
-    assert len(data) == 1
-    assert data[0]["id"] == test_game_blitz.id
+    assert len(data["results"]) == 1
+    assert data["results"][0]["id"] == test_game_blitz.id
 
 
 def test_category_rapid(test_player_a, test_game_bullet, test_game_blitz, test_game_rapid):
@@ -223,8 +225,8 @@ def test_category_rapid(test_player_a, test_game_bullet, test_game_blitz, test_g
     response = client.get("/api/games/history/me/?category=rapid")
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
-    assert len(data) == 1
-    assert data[0]["id"] == test_game_rapid.id
+    assert len(data["results"]) == 1
+    assert data["results"][0]["id"] == test_game_rapid.id
 
 
 def test_wrong_category(test_player_a):
@@ -256,10 +258,82 @@ def test_ordering(order, expected_status, test_player_a, test_player_a_game_1_da
 
     if order == "?order=finished_at":
         # Games should be sorted starting from the older one so test_player_a_game_2_day_ago should be first
-        assert data[0]["id"] == test_player_a_game_2_day_ago.id
-        assert data[1]["id"] == test_player_a_game_1_day_ago.id
+        assert data["results"][0]["id"] == test_player_a_game_2_day_ago.id
+        assert data["results"][1]["id"] == test_player_a_game_1_day_ago.id
     if order == "":
         # If user doesn't provide any order by default games should be sorted starting from the newest one
         # So test_player_a_game_1_day_ago should be first
-        assert data[0]["id"] == test_player_a_game_1_day_ago.id
-        assert data[1]["id"] == test_player_a_game_2_day_ago.id
+        assert data["results"][0]["id"] == test_player_a_game_1_day_ago.id
+        assert data["results"][1]["id"] == test_player_a_game_2_day_ago.id
+
+
+# Tests for pagination
+def test_pagination(test_player_a, test_opponent, test_time_control):
+    """
+    In this test we manually create 11 games for test_player_a and checks if our endpoint correctly
+    apply pagination with page_size=10
+    """
+    client = APIClient()
+    client.force_authenticate(test_player_a)
+    for _ in range(11):
+        Game.objects.create(
+            white_player=test_player_a,
+            black_player=test_opponent,
+            time_control=test_time_control,
+            white_time_remaining=180,
+            black_time_remaining=180,
+            status=Game.Status.FINISHED,
+            white_rating=300,
+            black_rating=300,
+        )
+
+    # Page 1 should have 10 games
+    response_page1 = client.get("/api/games/history/me/?page=1")
+    assert response_page1.status_code == status.HTTP_200_OK
+
+    data_page1 = response_page1.json()
+    assert len(data_page1["results"]) == 10
+
+    # Page 2 should have only 1 game because our user has exactly 11 games
+    response_page2 = client.get("/api/games/history/me/?page=2")
+    assert response_page2.status_code == status.HTTP_200_OK
+
+    data_page2 = response_page2.json()
+    assert len(data_page2["results"]) == 1
+
+
+def test_pagination_without_page(test_player_a, test_opponent, test_time_control):
+    """
+    In this test we manually create 11 games for test_player_a and expect that when request user
+    doesn't provide page in url endpoint take page=1 as default.
+    """
+    client = APIClient()
+    client.force_authenticate(test_player_a)
+    for _ in range(11):
+        Game.objects.create(
+            white_player=test_player_a,
+            black_player=test_opponent,
+            time_control=test_time_control,
+            white_time_remaining=180,
+            black_time_remaining=180,
+            status=Game.Status.FINISHED,
+            white_rating=300,
+            black_rating=300,
+        )
+
+    response = client.get("/api/games/history/me/")
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    # Page 1 should have 10 games
+    assert len(data["results"]) == 10
+
+
+def test_pagination_404_for_not_exist_page(test_player_a, test_game_white):
+    """
+    In this test test_player_a has only 1 game so if request user provide page=2
+    endpoint should return 404 error for not exist page
+    """
+    client = APIClient()
+    client.force_authenticate(test_player_a)
+    response = client.get("/api/games/history/me/?page=2")
+    assert response.status_code == status.HTTP_404_NOT_FOUND
