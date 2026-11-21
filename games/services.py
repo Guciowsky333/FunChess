@@ -466,6 +466,10 @@ def change_players_ratings_after_game(game: Game) -> None:
     white_change = calculate_elo_change(white_rating.rating, black_rating.rating, score_a)
     black_change = calculate_elo_change(black_rating.rating, white_rating.rating, (1.0 - score_a))
 
+    game.white_rating_change = white_change
+    game.black_rating_change = black_change
+    game.save()
+
     white_rating.rating += white_change
     black_rating.rating += black_change
 

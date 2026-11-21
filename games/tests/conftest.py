@@ -1,9 +1,11 @@
+from datetime import timedelta
 from unittest.mock import patch
 
 import pytest
 import pytest_asyncio
 from channels.db import database_sync_to_async
 from channels.testing import WebsocketCommunicator
+from django.utils import timezone
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from accounts.models import CustomUser
@@ -28,6 +30,33 @@ def test_time_control_10_minutes(db):
 
 
 @pytest.fixture
+def test_time_control_bullet(db):
+    return TimeControl.objects.create(
+        category=TimeControl.Category.BULLET,
+        initial_time_seconds=60,
+        increment_seconds=1,
+    )
+
+
+@pytest.fixture
+def test_time_control_blitz(db):
+    return TimeControl.objects.create(
+        category=TimeControl.Category.BLITZ,
+        initial_time_seconds=180,
+        increment_seconds=3,
+    )
+
+
+@pytest.fixture
+def test_time_control_rapid(db):
+    return TimeControl.objects.create(
+        category=TimeControl.Category.RAPID,
+        initial_time_seconds=600,
+        increment_seconds=5,
+    )
+
+
+@pytest.fixture
 def test_game(test_user_1, test_user_2, test_time_control_10_minutes):
     return Game.objects.create(
         white_player=test_user_1,
@@ -36,6 +65,153 @@ def test_game(test_user_1, test_user_2, test_time_control_10_minutes):
         white_time_remaining=600,
         black_time_remaining=600,
         status=Game.Status.IN_PROGRESS,
+        white_rating=300,
+        black_rating=300,
+    )
+
+
+@pytest.fixture
+def test_game_win(test_player_a, test_opponent, test_time_control):
+    return Game.objects.create(
+        white_player=test_player_a,
+        black_player=test_opponent,
+        time_control=test_time_control,
+        white_time_remaining=600,
+        black_time_remaining=600,
+        status=Game.Status.FINISHED,
+        white_rating=300,
+        black_rating=300,
+        result=Game.Result.WHITE_WON,
+    )
+
+
+@pytest.fixture
+def test_game_lose(test_player_a, test_opponent, test_time_control):
+    return Game.objects.create(
+        white_player=test_player_a,
+        black_player=test_opponent,
+        time_control=test_time_control,
+        white_time_remaining=600,
+        black_time_remaining=600,
+        status=Game.Status.FINISHED,
+        white_rating=300,
+        black_rating=300,
+        result=Game.Result.BLACK_WON,
+    )
+
+
+@pytest.fixture
+def test_game_draw(test_player_a, test_opponent, test_time_control):
+    return Game.objects.create(
+        white_player=test_player_a,
+        black_player=test_opponent,
+        time_control=test_time_control,
+        white_time_remaining=600,
+        black_time_remaining=600,
+        status=Game.Status.FINISHED,
+        white_rating=300,
+        black_rating=300,
+        result=Game.Result.DRAW,
+    )
+
+
+@pytest.fixture
+def test_game_white(test_player_a, test_opponent, test_time_control):
+    return Game.objects.create(
+        white_player=test_player_a,
+        black_player=test_opponent,
+        time_control=test_time_control,
+        white_time_remaining=600,
+        black_time_remaining=600,
+        status=Game.Status.FINISHED,
+        white_rating=300,
+        black_rating=300,
+    )
+
+
+@pytest.fixture
+def test_game_bullet(test_player_a, test_opponent, test_time_control_bullet):
+    return Game.objects.create(
+        white_player=test_player_a,
+        black_player=test_opponent,
+        time_control=test_time_control_bullet,
+        white_time_remaining=60,
+        black_time_remaining=60,
+        status=Game.Status.FINISHED,
+        white_rating=300,
+        black_rating=300,
+    )
+
+
+@pytest.fixture
+def test_game_blitz(test_player_a, test_opponent, test_time_control_blitz):
+    return Game.objects.create(
+        white_player=test_player_a,
+        black_player=test_opponent,
+        time_control=test_time_control_blitz,
+        white_time_remaining=180,
+        black_time_remaining=180,
+        status=Game.Status.FINISHED,
+        white_rating=300,
+        black_rating=300,
+    )
+
+
+@pytest.fixture
+def test_game_rapid(test_player_a, test_opponent, test_time_control_rapid):
+    return Game.objects.create(
+        white_player=test_player_a,
+        black_player=test_opponent,
+        time_control=test_time_control_rapid,
+        white_time_remaining=600,
+        black_time_remaining=600,
+        status=Game.Status.FINISHED,
+        white_rating=300,
+        black_rating=300,
+    )
+
+
+@pytest.fixture
+def test_game_black(test_player_a, test_opponent, test_time_control):
+    return Game.objects.create(
+        white_player=test_opponent,
+        black_player=test_player_a,
+        time_control=test_time_control,
+        white_time_remaining=600,
+        black_time_remaining=600,
+        status=Game.Status.FINISHED,
+        white_rating=300,
+        black_rating=300,
+    )
+
+
+@pytest.fixture
+def test_player_a_game_1_day_ago(test_player_a, test_opponent, test_time_control):
+    return Game.objects.create(
+        white_player=test_player_a,
+        black_player=test_opponent,
+        time_control=test_time_control,
+        white_time_remaining=600,
+        black_time_remaining=600,
+        status=Game.Status.FINISHED,
+        white_rating=300,
+        black_rating=300,
+        finished_at=timezone.now() - timedelta(days=1),
+    )
+
+
+@pytest.fixture
+def test_player_a_game_2_day_ago(test_player_a, test_opponent, test_time_control):
+    return Game.objects.create(
+        white_player=test_player_a,
+        black_player=test_opponent,
+        time_control=test_time_control,
+        white_time_remaining=600,
+        black_time_remaining=600,
+        status=Game.Status.FINISHED,
+        white_rating=300,
+        black_rating=300,
+        finished_at=timezone.now() - timedelta(days=2),
     )
 
 
@@ -47,6 +223,8 @@ def test_game_status_waiting(test_user_1, test_user_2, test_time_control_10_minu
         time_control=test_time_control_10_minutes,
         white_time_remaining=600,
         black_time_remaining=600,
+        white_rating=300,
+        black_rating=300,
     )
 
 

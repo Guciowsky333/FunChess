@@ -6,9 +6,8 @@ from channels.testing import WebsocketCommunicator
 from django.utils import timezone
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from accounts.models import CustomUser
 from config.asgi import application
-from games.models import Game, TimeControl
+from games.models import Game, UserRating
 from matchmaking.models import MatchmakingEntry, TemporaryBan
 
 
@@ -18,27 +17,25 @@ def test_game(db, test_player_a, test_player_b, test_time_control):
         white_player=test_player_a,
         black_player=test_player_b,
         time_control=test_time_control,
+        white_rating=300,
+        black_rating=300,
     )
 
 
 @pytest.fixture
-def test_time_control(db):
-    return TimeControl.objects.create(category=TimeControl.Category.RAPID, initial_time_seconds=600)
+def test_rating_player_a_1200(test_player_a, test_time_control):
+    user_rating = UserRating.objects.get(user=test_player_a, category=test_time_control.category)
+    user_rating.rating = 1200
+    user_rating.save()
+    return user_rating.rating
 
 
 @pytest.fixture
-def test_player_a(db):
-    return CustomUser.objects.create_user(email="player_a@com", username="test_player_a")
-
-
-@pytest.fixture
-def test_player_b(db):
-    return CustomUser.objects.create_user(email="player_b@com", username="test_player_b")
-
-
-@pytest.fixture
-def test_opponent(db):
-    return CustomUser.objects.create_user(email="opponent@com", username="test_opponent")
+def test_rating_player_b_1000(test_player_b, test_time_control):
+    user_rating = UserRating.objects.get(user=test_player_b, category=test_time_control.category)
+    user_rating.rating = 1000
+    user_rating.save()
+    return user_rating.rating
 
 
 @pytest.fixture

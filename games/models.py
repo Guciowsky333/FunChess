@@ -74,6 +74,10 @@ class Game(models.Model):
 
     reason = models.CharField(choices=Reason.choices, max_length=21, blank=True, null=True)
 
+    # Players
+    white_player = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="games_as_white")
+    black_player = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="games_as_black")
+
     # This fields show if players joined to the game at all, if player join once fild will be true ale the time
     white_joined = models.BooleanField(default=False)
     black_joined = models.BooleanField(default=False)
@@ -86,8 +90,13 @@ class Game(models.Model):
     white_disconnected_deadline = models.DateTimeField(null=True, blank=True)
     black_disconnected_deadline = models.DateTimeField(null=True, blank=True)
 
-    white_player = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="games_as_white")
-    black_player = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="games_as_black")
+    # Players rating at the moment of starting the game
+    white_rating = models.PositiveIntegerField()
+    black_rating = models.PositiveIntegerField()
+
+    # How many rating points players gained or lost after the game
+    white_rating_change = models.SmallIntegerField(null=True, blank=True)
+    black_rating_change = models.SmallIntegerField(null=True, blank=True)
 
     time_control = models.ForeignKey(TimeControl, on_delete=models.CASCADE, related_name="time_control")
 

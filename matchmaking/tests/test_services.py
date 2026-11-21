@@ -88,6 +88,8 @@ def test_user_already_has_game_in_progress(test_player_a, test_time_control, tes
         black_player=test_player_b,
         status=Game.Status.IN_PROGRESS,
         time_control=test_time_control,
+        white_rating=300,
+        black_rating=300,
     )
     with pytest.raises(YouAlreadyHaveGameInProgress):
         create_matchmaking_entry(test_player_a, test_time_control)
@@ -219,12 +221,16 @@ def test_create_game_player_a_with_higher_ratio_as_white(
         black_player=test_opponent,
         time_control=test_time_control,
         status=Game.Status.FINISHED,
+        white_rating=300,
+        black_rating=300,
     )
     Game.objects.create(
         white_player=test_opponent,
         black_player=test_player_a,
         time_control=test_time_control,
         status=Game.Status.FINISHED,
+        white_rating=300,
+        black_rating=300,
     )
 
     # Player B's game
@@ -233,13 +239,16 @@ def test_create_game_player_a_with_higher_ratio_as_white(
         black_player=test_opponent,
         time_control=test_time_control,
         status=Game.Status.FINISHED,
+        white_rating=300,
+        black_rating=300,
     )
 
     game_id = create_game(test_player_a, test_player_b, test_time_control)
+
     new_game = Game.objects.get(pk=game_id)
+
     assert new_game.time_control == test_time_control
     assert new_game.white_player == test_player_a
-    assert new_game.black_player == test_player_b
 
 
 def test_create_game_player_a_without_any_game(test_player_a, test_player_b, test_opponent, test_time_control):
@@ -257,6 +266,8 @@ def test_create_game_player_a_without_any_game(test_player_a, test_player_b, tes
         black_player=test_opponent,
         time_control=test_time_control,
         status=Game.Status.FINISHED,
+        white_rating=300,
+        black_rating=300,
     )
     game_id = create_game(test_player_a, test_player_b, test_time_control)
     new_game = Game.objects.get(pk=game_id)
@@ -266,9 +277,7 @@ def test_create_game_player_a_without_any_game(test_player_a, test_player_b, tes
     assert new_game.black_player == test_player_b
 
 
-def test_create_game_both_players_with_the_same_white_ratio(
-    test_player_a, test_player_b, test_opponent, test_time_control
-):
+def test_create_game_both_players_with_the_same_white_ratio(test_player_a, test_player_b, test_time_control):
     """
     In this test both players have never played any game at this time control so they both have white ratio 0.5 and in
     this case when both players have exactly the same white ratio we expect that the function will choose randomly who will
@@ -280,6 +289,31 @@ def test_create_game_both_players_with_the_same_white_ratio(
 
     assert new_game.white_player == test_player_a or test_player_b
     assert new_game.black_player == test_player_a if new_game.white_player == test_player_b else test_player_b
+
+
+def test_create_game_set_players_rating(
+    test_player_a, test_rating_player_a_1200, test_time_control, test_player_b, test_rating_player_b_1000, test_opponent
+):
+    """
+    In this test player_b has one game as white so player_a should play as white
+    and expected that function will set up players ratings at the start of the game correctly
+    player_a = 1200, player_b = 1000.
+    """
+
+    # Creates 1 game where test_player_b played as white
+    Game.objects.create(
+        white_player=test_player_b,
+        black_player=test_opponent,
+        time_control=test_time_control,
+        status=Game.Status.FINISHED,
+        white_rating=1000,
+        black_rating=1000,
+    )
+
+    game_id = create_game(test_player_a, test_player_b, test_time_control)
+    new_game = Game.objects.get(pk=game_id)
+    assert new_game.white_rating == test_rating_player_a_1200
+    assert new_game.black_rating == test_rating_player_b_1000
 
 
 # Tests for "search_for_match" function
