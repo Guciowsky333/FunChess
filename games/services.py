@@ -320,6 +320,15 @@ def rematch_accept_and_create_new_game(previous_game_id: int, user: CustomUser) 
         previous_white_player = previous_game.white_player
         previous_black_player = previous_game.black_player
 
+        # Checks if players have already found other game in matchmaking and are now trying to accept remach and create another one
+        players_ids = [previous_white_player.id, previous_black_player.id]
+        busy = Game.objects.filter(
+            Q(white_player__in=players_ids) | Q(black_player__in=players_ids),
+            status__in=[Game.Status.WAITING, Game.Status.IN_PROGRESS],
+        ).exists()
+        if busy:
+            raise PlayersAlreadyInGame
+
         # User can accept remach offer only when his opponent sends it
         if previous_game.rematch_offered_by == Game.RematchState.ACCEPTED:
             raise TheRematchAlreadyAccepted
@@ -337,15 +346,6 @@ def rematch_accept_and_create_new_game(previous_game_id: int, user: CustomUser) 
         else:
             if previous_game.rematch_offered_by == Game.RematchState.OFFERED_BY_BLACK:
                 raise NotOpponentRematchOffer
-
-        # Checks if players don't have any game with status WAITING or IN_PROGRESS
-        players_ids = [previous_white_player.id, previous_black_player.id]
-        busy = Game.objects.filter(
-            Q(white_player__in=players_ids) | Q(black_player__in=players_ids),
-            status__in=[Game.Status.WAITING, Game.Status.IN_PROGRESS],
-        ).exists()
-        if busy:
-            raise PlayersAlreadyInGame
 
         # Takes player ratings with the same category as in previous game to create a new game but this time
         # previous_white_player plays as black and previous_black_player plays as white
@@ -370,7 +370,7 @@ def rematch_accept_and_create_new_game(previous_game_id: int, user: CustomUser) 
         previous_game.save()
 
         # Runs task abandon_game_if_not_started with countdown = 30s
-        abandon_game_if_not_started.apply_async(args=[new_game.id], countdown=30)
+        transaction.on_commit(lambda: abandon_game_if_not_started.apply_async(args=[new_game.id], countdown=30))
         return new_game.id
 
 

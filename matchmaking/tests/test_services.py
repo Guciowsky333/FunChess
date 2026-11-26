@@ -3,6 +3,7 @@ from datetime import timedelta
 import pytest
 from django.utils import timezone
 
+from games.exceptions import PlayersAlreadyInGame
 from games.models import Game, UserRating
 from matchmaking.exceptions import (
     AlreadySearching,
@@ -314,6 +315,26 @@ def test_create_game_set_players_rating(
     new_game = Game.objects.get(pk=game_id)
     assert new_game.white_rating == test_rating_player_a_1200
     assert new_game.black_rating == test_rating_player_b_1000
+
+
+def test_create_game_user_is_already_in_game(test_player_a, test_player_b, test_time_control, test_opponent):
+    """
+    In this test player_a already has active game so he can't create another one in matchmaking.
+    It is possible when a user tries to find new game ana then accepted remach offer to prevent case
+    where user will have 2 active games at the same time create_game lock players and then checks if
+    they don't have any active game as well like in remach function.
+    """
+    # Creates game with status IN_PROGRESS
+    Game.objects.create(
+        white_player=test_player_b,
+        black_player=test_opponent,
+        time_control=test_time_control,
+        status=Game.Status.IN_PROGRESS,
+        white_rating=1000,
+        black_rating=1000,
+    )
+    with pytest.raises(PlayersAlreadyInGame):
+        create_game(test_player_a, test_player_b, test_time_control)
 
 
 # Tests for "search_for_match" function

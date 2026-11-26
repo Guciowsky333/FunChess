@@ -6,6 +6,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from accounts.models import CustomUser
+from games.exceptions import PlayersAlreadyInGame
 from games.models import Game, TimeControl, UserRating
 from games.services import calculate_elo_change
 from matchmaking.exceptions import (
@@ -211,27 +212,43 @@ def create_game(player_a: CustomUser, player_b: CustomUser, time_control: TimeCo
 
     from matchmaking.tasks import abandon_game_if_not_started
 
-    # Establishes who should play as white and who as black
-    white_player, black_player = _determine_players_color(player_a, player_b, time_control)
+    with transaction.atomic():
+        # Lock both players to prevent creating 2 games at once (matchmaking vs rematch accept).
+        # Users are always locked in the same order (based on ids) here and in rematch_accept_and_create_new_game in games.
+        first_id, second_id = sorted([player_a.id, player_b.id])
+        CustomUser.objects.select_for_update().get(id=first_id)
+        CustomUser.objects.select_for_update().get(id=second_id)
 
-    # Players ratings at the start of the game
-    white_rating = UserRating.objects.get(user=white_player, category=time_control.category)
-    black_rating = UserRating.objects.get(user=black_player, category=time_control.category)
+        players_ids = [first_id, second_id]
+        # Checking if players have already been accepted remach and are now trying to create another game here
+        busy = Game.objects.filter(
+            Q(white_player__in=players_ids) | Q(black_player__in=players_ids),
+            status__in=[Game.Status.WAITING, Game.Status.IN_PROGRESS],
+        ).exists()
+        if busy:
+            raise PlayersAlreadyInGame
 
-    game = Game.objects.create(
-        white_player=white_player,
-        black_player=black_player,
-        time_control=time_control,
-        white_time_remaining=time_control.initial_time_seconds,
-        black_time_remaining=time_control.initial_time_seconds,
-        white_rating=white_rating.rating,
-        black_rating=black_rating.rating,
-    )
+        # Establishes who should play as white and who as black
+        white_player, black_player = _determine_players_color(player_a, player_b, time_control)
 
-    # Runs task
-    abandon_game_if_not_started.apply_async(args=[game.id], countdown=30)
+        # Players ratings at the start of the game
+        white_rating = UserRating.objects.get(user=white_player, category=time_control.category)
+        black_rating = UserRating.objects.get(user=black_player, category=time_control.category)
 
-    return game.id
+        game = Game.objects.create(
+            white_player=white_player,
+            black_player=black_player,
+            time_control=time_control,
+            white_time_remaining=time_control.initial_time_seconds,
+            black_time_remaining=time_control.initial_time_seconds,
+            white_rating=white_rating.rating,
+            black_rating=black_rating.rating,
+        )
+
+        # Runs task
+        transaction.on_commit(lambda: abandon_game_if_not_started.apply_async(args=[game.id], countdown=30))
+
+        return game.id
 
 
 RatingChanges = dict[str, int]
