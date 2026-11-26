@@ -30,6 +30,7 @@ from games.services import (
     get_current_turn_player,
     player_disconnect_from_game,
     process_move,
+    remach_reject,
     rematch_accept_and_create_new_game,
     rematch_offer,
     surrender_the_game,
@@ -760,10 +761,10 @@ def test_rematch_accept_status_is_not_finished(test_game, game_status):
         ),
     ],
 )
-def test_remach_accept_opponent_did_not_send_offer(test_game, game_rematch_offered_by, expected_error):
+def test_remach_accept_invalid_game_rematch_offered_by(test_game, game_rematch_offered_by, expected_error):
     """
     To accept remach filed "rematch_offered_by" in the game must be "OFFERED_BY_WHITE" or "OFFERED_BY_BLACK"
-    and only opponent of player who sent remach offer can accept it.
+    and only opponent of the player who sent remach offer can accept it.
     """
     test_game.status = Game.Status.FINISHED
     test_game.rematch_offered_by = game_rematch_offered_by
@@ -803,3 +804,78 @@ def test_remach_player_is_already_in_game(test_game, test_opponent):
 
     with pytest.raises(PlayersAlreadyInGame):
         rematch_accept_and_create_new_game(test_game.id, test_game.white_player)
+
+
+# Tests for "remach_reject" function
+
+
+def test_remach_reject(test_game):
+    """
+    Filed "rematch_offered_by" in the game is set up as "OFFERED_BY_BLACK" it means that
+    black already sent remach offer and only white can reject it.
+    Expected that our function will change filed "rematch_offered_by" as "REJECTED"
+    """
+    test_game.status = Game.Status.FINISHED
+    test_game.rematch_offered_by = Game.RematchState.OFFERED_BY_BLACK
+    test_game.save()
+
+    remach_reject(test_game.id, test_game.white_player)
+    test_game.refresh_from_db()
+
+    assert test_game.rematch_offered_by == Game.RematchState.REJECTED
+
+
+@pytest.mark.parametrize(
+    "game_status",
+    [
+        pytest.param(Game.Status.WAITING, id="The game has status 'WAITING'"),
+        pytest.param(Game.Status.IN_PROGRESS, id="The game has status 'IN_PROGRESS'"),
+    ],
+)
+def test_remach_reject_game_status_is_not_finished(game_status, test_game):
+    """
+    To reject remach ofert the game must have status 'FINISHED'
+    """
+    test_game.status = game_status
+    test_game.save()
+    with pytest.raises(TheGameIsNotOver):
+        remach_reject(test_game.id, test_game.white_player)
+
+
+@pytest.mark.parametrize(
+    "game_rematch_offered_by, expected_error",
+    [
+        pytest.param(Game.RematchState.NONE, TheRematchOfferNotSent, id="The game has status 'NONE'"),
+        pytest.param(Game.RematchState.ACCEPTED, TheRematchAlreadyAccepted, id="The game has already been accepted"),
+        pytest.param(
+            Game.RematchState.REJECTED, TheRematchOfferAlreadyRejected, id="The game has already been rejected"
+        ),
+        pytest.param(
+            Game.RematchState.OFFERED_BY_WHITE,
+            NotOpponentRematchOffer,
+            id="White sent offer so only black can accept it",
+        ),
+        pytest.param(
+            Game.RematchState.OFFERED_BY_BLACK,
+            NotOpponentRematchOffer,
+            id="Black sent offer so only white can accept it",
+        ),
+    ],
+)
+def test_remach_reject_invalid_game_rematch_offered_by(test_game, game_rematch_offered_by, expected_error):
+    """
+    To reject remach filed "rematch_offered_by" in the game must be "OFFERED_BY_WHITE" or "OFFERED_BY_BLACK"
+    and only opponent of the player who sent remach offer can reject it.
+    """
+    test_game.status = Game.Status.FINISHED
+    test_game.rematch_offered_by = game_rematch_offered_by
+    test_game.save()
+
+    # The same user who offered remach tries to accept it
+    if game_rematch_offered_by == Game.RematchState.OFFERED_BY_WHITE:
+        user = test_game.white_player
+    else:
+        user = test_game.black_player
+
+    with pytest.raises(expected_error):
+        remach_reject(test_game.id, user)

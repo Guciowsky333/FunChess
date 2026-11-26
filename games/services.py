@@ -255,13 +255,47 @@ def rematch_offer(game_id: int, user: CustomUser) -> None:
         return
 
 
+def remach_reject(game_id: int, user: CustomUser) -> None:
+    """
+    Set up field "rematch_offered_by" as REJECTED only if opponent's of provided user sent remach offer before
+    and the game has status FINISHED.
+    """
+    with transaction.atomic():
+        # Lock game to prevent case when a user will send reject and accept at the same time
+        game = Game.objects.select_for_update().get(pk=game_id)
+
+        if game.status != Game.Status.FINISHED:
+            raise TheGameIsNotOver
+
+        # User can reject remach offer only when his opponent sends it
+        if game.rematch_offered_by == Game.RematchState.ACCEPTED:
+            raise TheRematchAlreadyAccepted
+        if game.rematch_offered_by == Game.RematchState.NONE:
+            raise TheRematchOfferNotSent
+        if game.rematch_offered_by == Game.RematchState.REJECTED:
+            raise TheRematchOfferAlreadyRejected
+
+        is_white = user == game.white_player
+
+        if is_white:
+            # User can't reject his own remach offer
+            if game.rematch_offered_by == Game.RematchState.OFFERED_BY_WHITE:
+                raise NotOpponentRematchOffer
+        else:
+            if game.rematch_offered_by == Game.RematchState.OFFERED_BY_BLACK:
+                raise NotOpponentRematchOffer
+        game.rematch_offered_by = Game.RematchState.REJECTED
+        game.save()
+        return
+
+
 def rematch_accept_and_create_new_game(previous_game_id: int, user: CustomUser) -> int:
     """
     Checking if players at that moment have any games with status WAITING or IN_PROGRESS if not
     creates a new game for the players with the same time_control and with changed colors.
     White player now plays as black and black player from the previous game now plays as white.
     Return id of the new game and run abandon_game_if_not_started task that will
-    finish the within 30s if both players don't connect to this game.
+    finish the game within 30s if both players don't connect to this game.
     """
     from matchmaking.tasks import abandon_game_if_not_started
 
@@ -297,12 +331,10 @@ def rematch_accept_and_create_new_game(previous_game_id: int, user: CustomUser) 
         is_white = user == previous_white_player
 
         if is_white:
-            print("bialy")
             # User can't accept his own remach offer
             if previous_game.rematch_offered_by == Game.RematchState.OFFERED_BY_WHITE:
                 raise NotOpponentRematchOffer
         else:
-            print("czarny")
             if previous_game.rematch_offered_by == Game.RematchState.OFFERED_BY_BLACK:
                 raise NotOpponentRematchOffer
 
