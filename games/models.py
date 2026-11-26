@@ -65,6 +65,13 @@ class Game(models.Model):
         FIFTY_MOVE_RULE = "fifty_move_rule", "Fifty-move rule"
         THREEFOLD_REPETITION = "threefold_repetition", "Threefold repetition"
 
+    class RematchState(models.TextChoices):
+        NONE = "none"
+        OFFERED_BY_WHITE = "offered_by_white"
+        OFFERED_BY_BLACK = "offered_by_black"
+        REJECTED = "rejected"
+        ACCEPTED = "accepted"
+
     # id of last called task 'check_opponent_time' during the game
     pending_timeout_task_id = models.CharField(max_length=36, null=True, blank=True)
 
@@ -106,7 +113,7 @@ class Game(models.Model):
     current_turn_started_at = models.DateTimeField(null=True, blank=True)
 
     draw_offered_by = models.CharField(choices=PlayerColor.choices, max_length=5, blank=True, null=True)
-    rematch_offered_by = models.CharField(choices=PlayerColor.choices, max_length=5, blank=True, null=True)
+    rematch_offered_by = models.CharField(choices=RematchState.choices, max_length=16, default=RematchState.NONE)
 
     created_at = models.DateTimeField(auto_now_add=True)
     finished_at = models.DateTimeField(null=True, blank=True)

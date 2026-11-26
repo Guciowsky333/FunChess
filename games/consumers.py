@@ -37,7 +37,7 @@ from games.tasks import check_if_user_is_still_disconnected, check_opponent_time
 
 @database_sync_to_async
 def get_game(game_id: int):
-    return Game.objects.select_related("white_player", "black_player").get(pk=game_id)
+    return Game.objects.select_related("white_player", "black_player", "time_control").get(pk=game_id)
 
 
 @database_sync_to_async

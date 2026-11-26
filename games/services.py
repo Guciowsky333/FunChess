@@ -3,6 +3,7 @@ from datetime import timedelta
 import chess
 from channels.db import database_sync_to_async
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from accounts.models import CustomUser
@@ -14,9 +15,15 @@ from games.exceptions import (
     InvalidAction,
     InvalidMoveFormat,
     NotOpponentDrawOffer,
+    NotOpponentRematchOffer,
     PlayerDoesNotBelongToGameError,
+    PlayersAlreadyInGame,
     TheGameIsFinished,
     TheGameIsNotOver,
+    TheRematchAlreadyAccepted,
+    TheRematchOfferAlreadyRejected,
+    TheRematchOfferAlreadySent,
+    TheRematchOfferNotSent,
     TooLongMessage,
 )
 from games.models import ChatMessage, Game, Move, UserRating
@@ -224,6 +231,115 @@ def draw_reject(game: Game) -> None:
     """
     game.draw_offered_by = None
     game.save()
+
+
+def rematch_offer(game_id: int, user: CustomUser) -> None:
+    """
+    Set up field "rematch_offered_by" in the game as player's color who sent body with "rematch_offer" type.
+    User can send remach offer only if filed "rematch_offered_by" in the game is NONE and the game have status FINISHED.
+    """
+    with transaction.atomic():
+        # Locks game to prevent case when both players will send remach offer at the same time
+        game = Game.objects.select_for_update().get(pk=game_id)
+
+        # Filed rematch_offered_by must be NONE
+        if game.rematch_offered_by != Game.RematchState.NONE:
+            raise TheRematchOfferAlreadySent
+
+        # The game must be FINISHED
+        if game.status != Game.Status.FINISHED:
+            raise TheGameIsNotOver
+        is_white = user == game.white_player
+        game.rematch_offered_by = Game.RematchState.OFFERED_BY_WHITE if is_white else Game.RematchState.OFFERED_BY_BLACK
+        game.save()
+        return
+
+
+def rematch_accept_and_create_new_game(previous_game_id: int, user: CustomUser) -> int:
+    """
+    Checking if players at that moment have any games with status WAITING or IN_PROGRESS if not
+    creates a new game for the players with the same time_control and with changed colors.
+    White player now plays as black and black player from the previous game now plays as white.
+    Return id of the new game and run abandon_game_if_not_started task that will
+    finish the within 30s if both players don't connect to this game.
+    """
+    from matchmaking.tasks import abandon_game_if_not_started
+
+    with transaction.atomic():
+        # Lock the previous game so concurrent rematch actions (offer/accept/reject)
+        # run one at a time instead of overlapping.
+        previous_game = (
+            Game.objects.select_for_update(of=("self",))
+            .select_related("time_control", "white_player", "black_player")
+            .get(pk=previous_game_id)
+        )
+
+        if previous_game.status != Game.Status.FINISHED:
+            raise TheGameIsNotOver
+
+        # Lock both players to prevent creating 2 games at once (rematch accept vs matchmaking).
+        # Users are always locked in the same order (based on ids) here and in create_game in matchmaking.
+        first_id, second_id = sorted([previous_game.white_player.id, previous_game.black_player.id])
+        CustomUser.objects.select_for_update().get(pk=first_id)
+        CustomUser.objects.select_for_update().get(pk=second_id)
+
+        previous_white_player = previous_game.white_player
+        previous_black_player = previous_game.black_player
+
+        # User can accept remach offer only when his opponent sends it
+        if previous_game.rematch_offered_by == Game.RematchState.ACCEPTED:
+            raise TheRematchAlreadyAccepted
+        if previous_game.rematch_offered_by == Game.RematchState.NONE:
+            raise TheRematchOfferNotSent
+        if previous_game.rematch_offered_by == Game.RematchState.REJECTED:
+            raise TheRematchOfferAlreadyRejected
+
+        is_white = user == previous_white_player
+
+        if is_white:
+            print("bialy")
+            # User can't accept his own remach offer
+            if previous_game.rematch_offered_by == Game.RematchState.OFFERED_BY_WHITE:
+                raise NotOpponentRematchOffer
+        else:
+            print("czarny")
+            if previous_game.rematch_offered_by == Game.RematchState.OFFERED_BY_BLACK:
+                raise NotOpponentRematchOffer
+
+        # Checks if players don't have any game with status WAITING or IN_PROGRESS
+        players_ids = [previous_white_player.id, previous_black_player.id]
+        busy = Game.objects.filter(
+            Q(white_player__in=players_ids) | Q(black_player__in=players_ids),
+            status__in=[Game.Status.WAITING, Game.Status.IN_PROGRESS],
+        ).exists()
+        if busy:
+            raise PlayersAlreadyInGame
+
+        # Takes player ratings with the same category as in previous game to create a new game but this time
+        # previous_white_player plays as black and previous_black_player plays as white
+        white_rating = UserRating.objects.get(
+            user=previous_black_player, category=previous_game.time_control.category
+        ).rating
+        black_rating = UserRating.objects.get(
+            user=previous_white_player, category=previous_game.time_control.category
+        ).rating
+
+        new_game = Game.objects.create(
+            white_player=previous_black_player,
+            black_player=previous_white_player,
+            time_control=previous_game.time_control,
+            white_time_remaining=previous_game.time_control.initial_time_seconds,
+            black_time_remaining=previous_game.time_control.initial_time_seconds,
+            white_rating=white_rating,
+            black_rating=black_rating,
+        )
+
+        previous_game.rematch_offered_by = Game.RematchState.ACCEPTED
+        previous_game.save()
+
+        # Runs task abandon_game_if_not_started with countdown = 30s
+        abandon_game_if_not_started.apply_async(args=[new_game.id], countdown=30)
+        return new_game.id
 
 
 def get_current_turn_player(game: Game) -> CustomUser:

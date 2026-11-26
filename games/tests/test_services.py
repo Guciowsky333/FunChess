@@ -10,7 +10,13 @@ from games.exceptions import (
     InvalidAction,
     InvalidMoveFormat,
     NotOpponentDrawOffer,
+    NotOpponentRematchOffer,
+    PlayersAlreadyInGame,
     TheGameIsNotOver,
+    TheRematchAlreadyAccepted,
+    TheRematchOfferAlreadyRejected,
+    TheRematchOfferAlreadySent,
+    TheRematchOfferNotSent,
 )
 from games.models import ChatMessage, Game, Move
 from games.services import (
@@ -24,6 +30,8 @@ from games.services import (
     get_current_turn_player,
     player_disconnect_from_game,
     process_move,
+    rematch_accept_and_create_new_game,
+    rematch_offer,
     surrender_the_game,
     validate_action,
 )
@@ -615,3 +623,183 @@ def test_black_disconnect_from_game(test_game):
     test_game.refresh_from_db()
     assert not test_game.black_connected
     assert test_game.black_disconnected_deadline is not None
+
+
+# Tests for "rematch_offer" function
+@pytest.mark.parametrize(
+    "player_color",
+    [
+        pytest.param("white", id="White sent remach offer"),
+        pytest.param("black", id="Black sent remach offer"),
+    ],
+)
+def test_sent_remach_offer(player_color, test_game):
+    """
+    Checking if our function correctly set up filed "rematch_offered_by" in the game
+    as "OFFERED_BY_WHITE" if white sent remach offer or as "OFFERED_BY_BLACK" if black sent remach offer
+    """
+    # The game must be finished
+    test_game.status = Game.Status.FINISHED
+    test_game.save()
+
+    rematch_offer(test_game.id, test_game.white_player if player_color == "white" else test_game.black_player)
+    test_game.refresh_from_db()
+    if player_color == "white":
+        assert test_game.rematch_offered_by == Game.RematchState.OFFERED_BY_WHITE
+    else:
+        assert test_game.rematch_offered_by == Game.RematchState.OFFERED_BY_BLACK
+
+
+@pytest.mark.parametrize(
+    "game_rematch_offered_by",
+    [
+        pytest.param(Game.RematchState.OFFERED_BY_WHITE, id="White sent remach offer"),
+        pytest.param(Game.RematchState.OFFERED_BY_BLACK, id="Black sent remach offer"),
+        pytest.param(Game.RematchState.ACCEPTED, id="Remach offer already has been accepted"),
+        pytest.param(Game.RematchState.REJECTED, id="Remach offer already has been rejected"),
+    ],
+)
+def test_field_rematch_offered_by_not_none(test_game, game_rematch_offered_by):
+    """
+    To send remach offer filed "rematch_offered_by" in the game must be NONE. Checking all other
+    possibilities RemachState and expect that our function will rasie TheRematchOfferAlreadySent error.
+    """
+    test_game.rematch_offered_by = game_rematch_offered_by
+    test_game.status = Game.Status.FINISHED
+    test_game.save()
+
+    with pytest.raises(TheRematchOfferAlreadySent):
+        rematch_offer(test_game.id, test_game.white_player)
+
+
+@pytest.mark.parametrize(
+    "game_status",
+    [
+        pytest.param(Game.Status.WAITING, id="The game has status 'WAITING'"),
+        pytest.param(Game.Status.IN_PROGRESS, id="The game has status 'IN_PROGRESS'"),
+    ],
+)
+def test_send_remach_offer_game_not_finished(test_game, game_status):
+    """
+    To send remach offer a game must have status 'FINISHED'. In this test we check all other possibilities
+    status and expect that our function will rasie TheGameIsNotOver error.
+    """
+    test_game.status = game_status
+    test_game.save()
+    with pytest.raises(TheGameIsNotOver):
+        rematch_offer(test_game.id, test_game.white_player)
+
+
+# Tests for "rematch_accept_and_create_new_game" function
+def test_rematch_accept_and_create_new_game(test_game, mocker):
+    """
+    Filed "rematch_offered_by" in the game is set up as "OFFERED_BY_BLACK" it means that
+    black already sent remach offer and only white can accept it.
+    In this test we check whether our function will correctly create new game and set up filed
+    "rematch_offered_by" as "ACCEPTED" in previous game
+    """
+    # Mocking task that is runs inside function
+    mocker.patch("matchmaking.tasks.abandon_game_if_not_started.apply_async")
+
+    test_game.status = Game.Status.FINISHED
+    test_game.rematch_offered_by = Game.RematchState.OFFERED_BY_BLACK
+    test_game.save()
+
+    new_game_id = rematch_accept_and_create_new_game(test_game.id, test_game.white_player)
+    test_game.refresh_from_db()
+    assert test_game.rematch_offered_by == Game.RematchState.ACCEPTED
+
+    # Checking if new game exists
+    assert Game.objects.filter(id=new_game_id).exists()
+
+    # Checking new game fields
+    new_game = Game.objects.get(id=new_game_id)
+
+    assert new_game.status == Game.Status.WAITING
+    assert new_game.time_control == test_game.time_control
+    # In new game player who played as white now should play as black and vice vers
+    assert new_game.white_player == test_game.black_player
+    assert new_game.black_player == test_game.white_player
+
+
+@pytest.mark.parametrize(
+    "game_status",
+    [
+        pytest.param(Game.Status.WAITING, id="The game has status 'WAITING'"),
+        pytest.param(Game.Status.IN_PROGRESS, id="The game has status 'IN_PROGRESS'"),
+    ],
+)
+def test_rematch_accept_status_is_not_finished(test_game, game_status):
+    """
+    To accept remach offer a game status must be finished.
+    """
+    test_game.status = game_status
+    test_game.rematch_offered_by = Game.RematchState.OFFERED_BY_BLACK
+    test_game.save()
+    with pytest.raises(TheGameIsNotOver):
+        rematch_accept_and_create_new_game(test_game.id, test_game.white_player)
+
+
+@pytest.mark.parametrize(
+    "game_rematch_offered_by, expected_error",
+    [
+        pytest.param(Game.RematchState.NONE, TheRematchOfferNotSent, id="The game has status 'NONE'"),
+        pytest.param(Game.RematchState.ACCEPTED, TheRematchAlreadyAccepted, id="The game has already been accepted"),
+        pytest.param(
+            Game.RematchState.REJECTED, TheRematchOfferAlreadyRejected, id="The game has already been rejected"
+        ),
+        pytest.param(
+            Game.RematchState.OFFERED_BY_WHITE,
+            NotOpponentRematchOffer,
+            id="White sent offer so only black can accept it",
+        ),
+        pytest.param(
+            Game.RematchState.OFFERED_BY_BLACK,
+            NotOpponentRematchOffer,
+            id="Black sent offer so only white can accept it",
+        ),
+    ],
+)
+def test_remach_accept_opponent_did_not_send_offer(test_game, game_rematch_offered_by, expected_error):
+    """
+    To accept remach filed "rematch_offered_by" in the game must be "OFFERED_BY_WHITE" or "OFFERED_BY_BLACK"
+    and only opponent of player who sent remach offer can accept it.
+    """
+    test_game.status = Game.Status.FINISHED
+    test_game.rematch_offered_by = game_rematch_offered_by
+    test_game.save()
+
+    # The same user who offered remach tries to accept it
+    if game_rematch_offered_by == Game.RematchState.OFFERED_BY_WHITE:
+        user = test_game.white_player
+    else:
+        user = test_game.black_player
+
+    with pytest.raises(expected_error):
+        rematch_accept_and_create_new_game(test_game.id, user)
+
+
+def test_remach_player_is_already_in_game(test_game, test_opponent):
+    """
+    In this test black sent remach offer and white tires to accept it but black already find another game.
+    It can happer when black offer remach and then go to matchmaking and find new game before white manages
+    to accept remach offer.
+    """
+    test_game.status = Game.Status.FINISHED
+    test_game.rematch_offered_by = Game.RematchState.OFFERED_BY_BLACK
+    test_game.save()
+
+    # Creates new game for black with status "IN_PROGRESS"
+    Game.objects.create(
+        white_player=test_opponent,
+        black_player=test_game.black_player,
+        time_control=test_game.time_control,
+        white_time_remaining=600,
+        black_time_remaining=600,
+        white_rating=300,
+        black_rating=300,
+        status=Game.Status.IN_PROGRESS,
+    )
+
+    with pytest.raises(PlayersAlreadyInGame):
+        rematch_accept_and_create_new_game(test_game.id, test_game.white_player)

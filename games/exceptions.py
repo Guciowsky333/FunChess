@@ -44,3 +44,27 @@ class TooLongMessage(Exception):
 
 class TheGameIsNotOver(Exception):
     pass
+
+
+class PlayersAlreadyInGame(Exception):
+    pass
+
+
+class TheRematchAlreadyAccepted(Exception):
+    pass
+
+
+class TheRematchOfferNotSent(Exception):
+    pass
+
+
+class TheRematchOfferAlreadySent(Exception):
+    pass
+
+
+class NotOpponentRematchOffer(Exception):
+    pass
+
+
+class TheRematchOfferAlreadyRejected(Exception):
+    pass
