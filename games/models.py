@@ -51,7 +51,7 @@ class Game(models.Model):
         IN_PROGRESS = "in_progress", "In Progress"
         FINISHED = "finished", "Finished"
 
-    class PlayerColor(models.TextChoices):
+    class DrawOfferedBy(models.TextChoices):
         WHITE = "white", "White"
         BLACK = "black", "Black"
 
@@ -112,7 +112,7 @@ class Game(models.Model):
 
     current_turn_started_at = models.DateTimeField(null=True, blank=True)
 
-    draw_offered_by = models.CharField(choices=PlayerColor.choices, max_length=5, blank=True, null=True)
+    draw_offered_by = models.CharField(choices=DrawOfferedBy.choices, max_length=5, blank=True, null=True)
     rematch_offered_by = models.CharField(choices=RematchState.choices, max_length=16, default=RematchState.NONE)
 
     created_at = models.DateTimeField(auto_now_add=True)
